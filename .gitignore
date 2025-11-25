@@ -32,3 +32,4 @@ Thumbs.db
 
 # Project specific exclusions
 Setting/setting.conf
+*.yaml

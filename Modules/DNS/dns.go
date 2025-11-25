@@ -8,42 +8,79 @@ import (
 	stubresolver "github.com/official-biswadeb941/Infermal_v2/Modules/DNS/stub-resolver"
 )
 
+//
+// ---------------------------------------------------
+//   OPTIONAL CACHE INTERFACE (No Redis dependency)
+// ---------------------------------------------------
+//
+// Any cache backend (Redis, Memory, FS, DB) must satisfy this.
+// Declared here so DNS never imports the Redis package.
+//
+type Cache interface {
+	GetValue(ctx context.Context, key string) (string, error)
+	SetValue(ctx context.Context, key string, v interface{}, ttl time.Duration) error
+}
+
+//
+// ---------------------------------------------------
+//                RESOLVER INTERFACE
+// ---------------------------------------------------
 // Resolver is the minimal interface any resolver must implement.
+//
 type Resolver interface {
 	Resolve(ctx context.Context, domain string) (bool, error)
 }
 
-// DNS orchestrator supports a single primary resolver, an optional backup resolver,
-// and an optional recursive resolver (for future use). The recursive resolver is
-// nil by default and only used when both primary and backup fail.
+//
+// ---------------------------------------------------
+//                DNS ORCHESTRATOR
+// ---------------------------------------------------
+// DNS orchestrator supports:
+//   - primary resolver
+//   - optional backup resolver
+//   - optional recursive resolver
+//   - optional cache (Redis)
+//
+// Cache is injected ONLY from main.go via AttachCache.
+// No imports from Redis module.
+//
+
 type DNS struct {
 	primary   Resolver
 	backup    Resolver
-	recursive Resolver // optional; may be nil
+	recursive Resolver
+	cache     Cache // Optional (attached from main.go)
 }
 
-// Config contains DNS settings (mapped from setting.conf via config.go).
-// Keep this small and explicit so dns.go can build the appropriate resolvers.
+//
+// ---------------------------------------------------
+//                  CONFIG STRUCT
+// ---------------------------------------------------
+// Simple and explicit, mapped from setting.conf.
+//
+
 type Config struct {
-	Upstream  string // primary upstream (upstream_dns)
-	Backup    string // backup upstream (backup_dns), optional
-	Retries   int    // number of retries per record type (dns_retries)
-	TimeoutMS int64  // per-request timeout in milliseconds (dns_timeout_ms)
-	DelayMS   int64  // retry delay in milliseconds (optional; sensible default if 0)
+	Upstream  string // upstream_dns
+	Backup    string // backup_dns
+	Retries   int    // dns_retries
+	TimeoutMS int64  // dns_timeout_ms
+	DelayMS   int64  // optional retry delay
 }
 
-// New constructs the DNS orchestrator using the stub resolver(s).
-// It does NOT enable recursive resolution — that must be attached explicitly.
+//
+// ---------------------------------------------------
+//                   CONSTRUCTOR
+// ---------------------------------------------------
+// Automatically builds resolvers from Config.
+//
+
 func New(cfg Config) *DNS {
-	// Convert time values
 	timeout := time.Duration(cfg.TimeoutMS) * time.Millisecond
 	delay := time.Duration(cfg.DelayMS) * time.Millisecond
 	if delay <= 0 {
-		// sensible default delay between retries; you can change this via Config
 		delay = 50 * time.Millisecond
 	}
 
-	// Primary resolver MUST be configured — if not, create a stub that will return error on use.
 	var primary Resolver
 	if cfg.Upstream != "" {
 		primary = stubresolver.New(
@@ -54,7 +91,6 @@ func New(cfg Config) *DNS {
 		)
 	}
 
-	// Backup resolver is optional and only created if a backup upstream is provided.
 	var backup Resolver
 	if cfg.Backup != "" {
 		backup = stubresolver.New(
@@ -68,65 +104,149 @@ func New(cfg Config) *DNS {
 	return &DNS{
 		primary: primary,
 		backup:  backup,
-		// recursive remains nil until explicitly attached via AttachRecursive
+		// recursive remains nil unless explicitly attached
 	}
 }
 
-// AttachRecursive attaches a recursive resolver to the orchestrator.
-// The recursive resolver is optional and will only be called if both primary
-// and backup fail. This keeps current behavior unchanged until you enable it.
+//
+// ---------------------------------------------------
+//            ATTACH OPTIONAL COMPONENTS
+// ---------------------------------------------------
+//
 func (d *DNS) AttachRecursive(r Resolver) {
 	d.recursive = r
 }
 
-// Resolve attempts resolution using the following order:
-//  1) primary resolver (always)
-//  2) backup resolver (only if primary fails or returns no records)
-//  3) recursive resolver (only if both primary and backup fail and recursive is set)
+func (d *DNS) AttachCache(c Cache) {
+	d.cache = c
+}
+
 //
-// The backup and recursive resolvers are invoked only on failure of the previous stage,
-// guaranteeing zero performance hit from optional resolvers when primary is healthy.
+// ---------------------------------------------------
+//                     RESOLUTION
+// ---------------------------------------------------
+//
+// Resolution order:
+//
+//   1) cache lookup (optional)
+//   2) primary resolver
+//   3) backup resolver (optional)
+//   4) recursive resolver (optional)
+//
+// Cache is written only after a resolver stage completes.
+//
+
 func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
-	// Validate primary configured
+
+	// -------------------------------
+	// 0) CACHE LOOKUP (optional) with short timeout
+	// -------------------------------
+	if d.cache != nil {
+		cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		v, err := d.cache.GetValue(cacheCtx, "dns:"+domain)
+		cancel()
+		if err == nil {
+			if v == "1" {
+				return true, nil
+			}
+			if v == "0" {
+				return false, nil
+			}
+			// if unknown, continue to resolvers
+		}
+	}
+
+	// -------------------------------
+	// prepare a strict per-domain timeout
+	// -------------------------------
+	// Use a conservative per-domain timeout to avoid a single resolver blocking forever.
+	domainCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+
+	// -------------------------------
+	// 1) PRIMARY RESOLVER
+	// -------------------------------
 	if d.primary == nil {
 		return false, errors.New("dns: primary resolver not configured")
 	}
 
-	// First, try primary and return immediately on success.
-	ok, err := d.primary.Resolve(ctx, domain)
+	ok, err := d.primary.Resolve(domainCtx, domain)
 	if err == nil && ok {
+		if d.cache != nil {
+			// write cache asynchronously with a short timeout (best-effort)
+			go func() {
+				cctx, ccancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+				_ = d.cache.SetValue(cctx, "dns:"+domain, "1", 48*time.Hour)
+				ccancel()
+			}()
+		}
 		return true, nil
 	}
 
-	// If primary returned success==false (no records) but no error, still try backup.
-	// If primary returned an error, also try backup if available.
+	// -------------------------------
+	// 2) BACKUP RESOLVER (optional)
+	// -------------------------------
 	if d.backup != nil {
-		ok2, err2 := d.backup.Resolve(ctx, domain)
+		ok2, err2 := d.backup.Resolve(domainCtx, domain)
 		if err2 == nil && ok2 {
+			if d.cache != nil {
+				go func() {
+					cctx, ccancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+					_ = d.cache.SetValue(cctx, "dns:"+domain, "1", 48*time.Hour)
+					ccancel()
+				}()
+			}
 			return true, nil
 		}
-		// If backup succeeded/failed, return that result (or fall-through to recursive).
-		// We choose to continue to recursive only if backup did not succeed.
+		// if backup also fails, continue
 	}
 
-	// If recursive resolver is attached, only now call it.
+	// -------------------------------
+	// 3) RECURSIVE RESOLVER (optional)
+	// -------------------------------
 	if d.recursive != nil {
-		return d.recursive.Resolve(ctx, domain)
+		ok3, err3 := d.recursive.Resolve(domainCtx, domain)
+		if err3 == nil && ok3 {
+			if d.cache != nil {
+				go func() {
+					cctx, ccancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+					_ = d.cache.SetValue(cctx, "dns:"+domain, "1", 48*time.Hour)
+					ccancel()
+				}()
+			}
+			return true, nil
+		}
 	}
 
-	// Nothing succeeded — return primary error if present (prefer meaningful error), else generic.
+	// -------------------------------
+	// ALL FAILED → write cache miss (best-effort)
+	// -------------------------------
+	if d.cache != nil {
+		go func() {
+			cctx, ccancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			_ = d.cache.SetValue(cctx, "dns:"+domain, "0", 12*time.Hour)
+			ccancel()
+		}()
+	}
+
+	// return original primary error if available
 	if err != nil {
 		return false, err
 	}
+
 	return false, errors.New("dns: no records found")
 }
 
-// SwapPrimary allows swapping the primary resolver at runtime.
+//
+// ---------------------------------------------------
+//         RUNTIME SWAP METHODS (optional)
+// ---------------------------------------------------
+//
+
 func (d *DNS) SwapPrimary(r Resolver) {
 	d.primary = r
 }
 
-// SwapBackup allows swapping the backup resolver at runtime.
 func (d *DNS) SwapBackup(r Resolver) {
 	d.backup = r
 }

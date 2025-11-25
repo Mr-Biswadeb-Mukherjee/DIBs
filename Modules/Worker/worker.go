@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	Resources"github.com/official-biswadeb941/Infermal_v2/Modules/Resource"
+	Resources "github.com/official-biswadeb941/Infermal_v2/Modules/Resource"
 )
 
 type TaskFunc func(ctx context.Context) (interface{}, []string, []string, []error)
@@ -112,6 +112,14 @@ type WorkerPool struct {
 	lastLowLoadAt time.Time
 	monitorStop   chan struct{}
 	rrIndex       int
+
+	redis RedisStore // optional injected Redis store
+}
+
+// Minimal Redis interface used by worker pool. Declared here to avoid importing Redis module.
+type RedisStore interface {
+	GetValue(ctx context.Context, key string) (string, error)
+	SetValue(ctx context.Context, key string, v interface{}, ttl time.Duration) error
 }
 
 const (
@@ -122,7 +130,10 @@ const (
 	defaultEvalInterval    = 3 * time.Second
 )
 
-func NewWorkerPool(opts *RunOptions, concurrency int) *WorkerPool {
+//
+// NewWorkerPool now accepts an optional RedisStore parameter (pass nil if unused).
+//
+func NewWorkerPool(opts *RunOptions, concurrency int, redis RedisStore) *WorkerPool {
 	if opts == nil {
 		opts = &RunOptions{}
 	}
@@ -200,6 +211,7 @@ func NewWorkerPool(opts *RunOptions, concurrency int) *WorkerPool {
 		cancel:        cancel,
 		monitorStop:   make(chan struct{}),
 		lastLowLoadAt: time.Time{},
+		redis:         redis, // <<< injected redis client (may be nil)
 	}
 
 	if opts.LogChannel != nil {
@@ -481,6 +493,20 @@ func (wp *WorkerPool) executeTask(w *workerInfo, task *Task) {
 	if wp.options != nil && wp.options.OnTaskFinish != nil {
 		wp.options.OnTaskFinish(task.ID, result)
 	}
+
+	// ---- Redis writes: write per-task status + short-lived worker load ----
+	if wp.redis != nil {
+		ctx := context.Background()
+		status := "ok"
+		if len(errs) > 0 {
+			status = "error"
+		}
+		_ = wp.redis.SetValue(ctx, fmt.Sprintf("task:%d:status", task.ID), status, 24*time.Hour)
+
+		// write worker load (short TTL) for monitoring dashboards
+		_ = wp.redis.SetValue(ctx, fmt.Sprintf("worker:%d:load", w.id), w.load, 30*time.Second)
+	}
+
 }
 
 func (wp *WorkerPool) safeLog(msg string) {
@@ -519,6 +545,12 @@ func (wp *WorkerPool) SubmitTask(f TaskFunc, p TaskPriority, weight int) (int64,
 		created:  time.Now(),
 	}
 
+	// NOTE:
+	// If you want pre-schedule deduplication (skip scheduling when work already done),
+	// you need a caller-provided unique key for the unit-of-work. We can add an
+	// optional RunOptions.TaskKey func(...) string that returns a dedupe key. For now
+	// we only write results to Redis after execution (avoids false negatives).
+
 	// --- FIXED WORKER SELECTION (Round-Robin) ---
 	if len(wp.workers) == 0 {
 		return 0, nil, errors.New("no workers available")
@@ -534,9 +566,9 @@ func (wp *WorkerPool) SubmitTask(f TaskFunc, p TaskPriority, weight int) (int64,
 
 	selected.mu.Lock()
 	heap.Push(&selected.taskQueue, task)
-	selected.load += task.Weight
 	selected.cond.Signal()
 	selected.mu.Unlock()
+
 
 	return id, resultCh, nil
 }

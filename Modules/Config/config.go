@@ -16,31 +16,34 @@ type Config struct {
 	MaxRetries       int   // worker retries
 	AutoScale        bool
 
-	// NEW DNS FIELDS
-	UpstreamDNS   string // DNS server e.g. '1.1.1.1:53'
+	// DNS settings
+	UpstreamDNS   string
 	BackupDNS     string
-	DNSRetries    int    // retry count for stub resolver
-	DNSTimeoutMS  int64  // DNS call timeout in ms
+	DNSRetries    int
+	DNSTimeoutMS  int64
 }
 
 var defaultConfig = Config{
-	RateLimit:        130,
-	CooldownAfter:    500,
-	CooldownDuration: 30,
-	TimeoutSeconds:   4,
-	MaxRetries:       0,
-	AutoScale:        true,
+	// Worker / Performance defaults
+	RateLimit:        40,
+	CooldownAfter:    2500,
+	CooldownDuration: 20,
+	TimeoutSeconds:   5,
+	MaxRetries:       3,
+	AutoScale:        false,
 
-	// NEW DEFAULT DNS VALUES
-	UpstreamDNS:  "8.8.8.8:53",
-	DNSRetries:   3,
-	DNSTimeoutMS: 800,
+	// DNS defaults
+	UpstreamDNS:  "9.9.9.9:53",
+	BackupDNS:    "1.1.1.1:53",
+	DNSRetries:   2,
+	DNSTimeoutMS: 500,
 }
 
 func LoadOrCreateConfig(path string) (Config, error) {
 	_ = os.MkdirAll("Setting", 0o755)
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		// Create new config file with default values
 		err := writeDefault(path)
 		if err != nil {
 			return defaultConfig, err
@@ -48,6 +51,7 @@ func LoadOrCreateConfig(path string) (Config, error) {
 		return defaultConfig, nil
 	}
 
+	// Parse existing config
 	return parseConfig(path)
 }
 
@@ -59,13 +63,16 @@ func writeDefault(path string) error {
 	defer f.Close()
 
 	_, err = f.WriteString(fmt.Sprintf(
-		"rate_limit=%d\n"+
+		"# Worker / Performance\n"+
+			"rate_limit=%d\n"+
 			"cooldown_after=%d\n"+
 			"cooldown_duration=%d\n"+
 			"timeout_seconds=%d\n"+
 			"max_retries=%d\n"+
-			"autoscale=%t\n"+
+			"autoscale=%t\n\n"+
+			"# DNS settings\n"+
 			"upstream_dns=%s\n"+
+			"backup_dns=%s\n"+
 			"dns_retries=%d\n"+
 			"dns_timeout_ms=%d\n",
 		defaultConfig.RateLimit,
@@ -75,6 +82,7 @@ func writeDefault(path string) error {
 		defaultConfig.MaxRetries,
 		defaultConfig.AutoScale,
 		defaultConfig.UpstreamDNS,
+		defaultConfig.BackupDNS,
 		defaultConfig.DNSRetries,
 		defaultConfig.DNSTimeoutMS,
 	))
@@ -98,14 +106,16 @@ func parseConfig(path string) (Config, error) {
 			continue
 		}
 
-		pair := strings.SplitN(line, "=", 2)
-		if len(pair) != 2 {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
 			continue
 		}
 
-		key, value := pair[0], pair[1]
+		key, value := parts[0], parts[1]
 
 		switch key {
+
+		// Worker / Performance
 		case "rate_limit":
 			cfg.RateLimit, _ = strconv.Atoi(value)
 		case "cooldown_after":
@@ -119,9 +129,11 @@ func parseConfig(path string) (Config, error) {
 		case "autoscale":
 			cfg.AutoScale = (value == "true")
 
-		// NEW DNS KEYS
+		// DNS
 		case "upstream_dns":
 			cfg.UpstreamDNS = value
+		case "backup_dns":
+			cfg.BackupDNS = value
 		case "dns_retries":
 			cfg.DNSRetries, _ = strconv.Atoi(value)
 		case "dns_timeout_ms":

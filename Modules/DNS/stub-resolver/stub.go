@@ -9,7 +9,6 @@ import (
 )
 
 // StubResolver performs a DNS query against ONE upstream DNS server.
-// No defaults are set here — everything is provided by dns.go via options.
 type StubResolver struct {
     Upstream string        // primary DNS server (must be provided)
     Retries  int           // retries per record type
@@ -19,60 +18,43 @@ type StubResolver struct {
 
 type Option func(*StubResolver)
 
-// ---------------------------------------------------------
-// Functional options — no defaults, all must come from dns.go
-// ---------------------------------------------------------
+// -------------------------
+// Functional options
+// -------------------------
 
 func WithUpstream(u string) Option {
-    return func(r *StubResolver) {
-        r.Upstream = u
-    }
+    return func(r *StubResolver) { r.Upstream = u }
 }
-
 func WithRetries(n int) Option {
-    return func(r *StubResolver) {
-        r.Retries = n
-    }
+    return func(r *StubResolver) { r.Retries = n }
 }
-
 func WithDelay(d time.Duration) Option {
-    return func(r *StubResolver) {
-        r.Delay = d
-    }
+    return func(r *StubResolver) { r.Delay = d }
 }
-
 func WithTimeout(t time.Duration) Option {
-    return func(r *StubResolver) {
-        r.Timeout = t
-    }
+    return func(r *StubResolver) { r.Timeout = t }
 }
-
-// ---------------------------------------------------------
-// Constructor — NO internal defaults
-// ---------------------------------------------------------
 
 func New(opts ...Option) *StubResolver {
     r := &StubResolver{}
-
     for _, opt := range opts {
         opt(r)
     }
-
     return r
 }
 
 // ---------------------------------------------------------
-// Internal DNS query (ONE upstream only)
+// Safe context-bound resolveOnce
 // ---------------------------------------------------------
 
 func (r *StubResolver) resolveOnce(ctx context.Context, fqdn string, qtype uint16) (*dns.Msg, error) {
     if r.Upstream == "" {
-        return nil, errors.New("stubresolver: upstream DNS not configured")
+        return nil, errors.New("stubresolver: upstream not configured")
     }
 
     client := &dns.Client{
         Net:            "udp",
-        Timeout:        r.Timeout,
+        Timeout:        r.Timeout, // internal timeout as fallback
         UDPSize:        4096,
         SingleInflight: true,
     }
@@ -104,8 +86,7 @@ func (r *StubResolver) resolveOnce(ctx context.Context, fqdn string, qtype uint1
 }
 
 // ---------------------------------------------------------
-// Resolve A then AAAA (primary DNS only)
-// Backup DNS is handled at dns.go level
+// Resolve A then AAAA with safe retries
 // ---------------------------------------------------------
 
 func (r *StubResolver) Resolve(ctx context.Context, domain string) (bool, error) {
@@ -116,24 +97,36 @@ func (r *StubResolver) Resolve(ctx context.Context, domain string) (bool, error)
         return false, errors.New("stubresolver: upstream not configured")
     }
     if r.Retries <= 0 {
-        return false, errors.New("stubresolver: retries not configured")
+        return false, errors.New("stubresolver: retries not set")
     }
     if r.Timeout <= 0 {
-        return false, errors.New("stubresolver: timeout not configured")
+        return false, errors.New("stubresolver: timeout not set")
     }
 
     fqdn := dns.Fqdn(domain)
     qtypes := []uint16{dns.TypeA, dns.TypeAAAA}
 
     for _, qtype := range qtypes {
+
         for attempt := 0; attempt < r.Retries; attempt++ {
 
-            resp, err := r.resolveOnce(ctx, fqdn, qtype)
+            // Per-attempt context
+            attemptCtx, cancel := context.WithTimeout(ctx, r.Timeout)
+            resp, err := r.resolveOnce(attemptCtx, fqdn, qtype)
+            cancel()
+
             if err == nil && resp != nil && len(resp.Answer) > 0 {
                 return true, nil
             }
 
-            time.Sleep(r.Delay)
+            // context-aware delay
+            if r.Delay > 0 {
+                select {
+                case <-ctx.Done():
+                    return false, ctx.Err()
+                case <-time.After(r.Delay):
+                }
+            }
         }
     }
 
