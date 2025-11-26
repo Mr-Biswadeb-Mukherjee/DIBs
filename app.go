@@ -50,229 +50,218 @@ func startAnimation(stopChan chan struct{}) {
 
 func main() {
 
-	animStop := make(chan struct{})
-	go startAnimation(animStop)
+    animStop := make(chan struct{})
+    go startAnimation(animStop)
 
-	// Load config
-	cfg, err := config.LoadOrCreateConfig("Setting/setting.conf")
-	if err != nil {
-		close(animStop)
-		fmt.Println("\nError loading config:", err)
-		os.Exit(1)
-	}
+    // Start timestamp (system time, 12-hour format, dd-mm-yy)
+    startTime := time.Now().Local()
+    fmt.Printf("\n[%s] Engine Started\n",
+        startTime.Format("02-01-06 03:04:05 PM"))
 
-	// Init Redis
-	if err := redis.Init(); err != nil {
-		close(animStop)
-		fmt.Println("\nError initializing Redis:", err)
-		os.Exit(1)
-	}
+    // Load config
+    cfg, err := config.LoadOrCreateConfig("Setting/setting.conf")
+    if err != nil {
+        close(animStop)
+        fmt.Println("\nError loading config:", err)
+        os.Exit(1)
+    }
 
-	// Wrap Redis client behind interface
-	var rdb RedisStore = redis.Client()
+    // Init Redis
+    if err := redis.Init(); err != nil {
+        close(animStop)
+        fmt.Println("\nError initializing Redis:", err)
+        os.Exit(1)
+    }
 
-	// DNS engine
-	dns := dnsengine.New(dnsengine.Config{
-		Upstream:  cfg.UpstreamDNS,
-		Backup:    cfg.BackupDNS,
-		Retries:   cfg.DNSRetries,
-		TimeoutMS: cfg.DNSTimeoutMS,
-	})
+    var rdb RedisStore = redis.Client()
 
-	// Load keywords
-	keywords, err := domain_generator.LoadKeywordsCSV("Input/Keywords.csv")
-	if err != nil {
-		close(animStop)
-		fmt.Fprintf(os.Stderr, "\nError loading Keywords.csv: %v\n", err)
-		os.Exit(1)
-	}
+    dns := dnsengine.New(dnsengine.Config{
+        Upstream:  cfg.UpstreamDNS,
+        Backup:    cfg.BackupDNS,
+        Retries:   cfg.DNSRetries,
+        TimeoutMS: cfg.DNSTimeoutMS,
+    })
 
-	// Generate domains
-	var allGenerated []string
-	for _, base := range keywords {
-		groups := domain_generator.RunAll(base)
-		for _, g := range groups {
-			allGenerated = append(allGenerated, g...)
-		}
-	}
+    keywords, err := domain_generator.LoadKeywordsCSV("Input/Keywords.csv")
+    if err != nil {
+        close(animStop)
+        fmt.Fprintf(os.Stderr, "\nError loading Keywords.csv: %v\n", err)
+        os.Exit(1)
+    }
 
-	total := int64(len(allGenerated))
-	if total == 0 {
-		close(animStop)
-		fmt.Println("No domains generated. Exiting.")
-		return
-	}
+    var allGenerated []string
+    for _, base := range keywords {
+        groups := domain_generator.DomainGenerator(base)
+        for _, g := range groups {
+            allGenerated = append(allGenerated, g...)
+        }
+    }
 
-	// Async CSV writer
-	fw, err := filewriter.SafeNewCSVWriter("Input/Malicious_Domains.csv", filewriter.Overwrite)
-	if err != nil {
-		close(animStop)
-		fmt.Println("Error opening CSV writer:", err)
-		os.Exit(1)
-	}
+    total := int64(len(allGenerated))
+    if total == 0 {
+        close(animStop)
+        fmt.Println("No domains generated. Exiting.")
+        return
+    }
 
-	// Worker pool
-	opts := &wpkg.RunOptions{
-		Timeout:         time.Duration(cfg.TimeoutSeconds) * time.Second,
-		MaxRetries:      cfg.MaxRetries,
-		AutoScale:       cfg.AutoScale,
-		MinWorkers:      1,
-		NonBlockingLogs: true,
-	}
+    fw, err := filewriter.SafeNewCSVWriter("Input/Domains.csv", filewriter.Overwrite)
+    if err != nil {
+        close(animStop)
+        fmt.Println("Error opening CSV writer:", err)
+        os.Exit(1)
+    }
 
-	wp := wpkg.NewWorkerPool(opts, runtime.NumCPU()*4, rdb)
+    opts := &wpkg.RunOptions{
+        Timeout:         time.Duration(cfg.TimeoutSeconds) * time.Second,
+        MaxRetries:      cfg.MaxRetries,
+        AutoScale:       cfg.AutoScale,
+        MinWorkers:      1,
+        NonBlockingLogs: true,
+    }
 
-	close(animStop)
-	time.Sleep(150 * time.Millisecond)
+    wp := wpkg.NewWorkerPool(opts, runtime.NumCPU()*4, rdb)
 
-	var completed int64 = 0
-	var resolved int64 = 0
-	start := time.Now()
+    close(animStop)
+    time.Sleep(150 * time.Millisecond)
 
-	// RATE LIMITER: guard against zero and give a stoppable ticker
-	var rateTicker *time.Ticker
-	if cfg.RateLimit <= 0 {
-		// default to 1 req/s if misconfigured
-		rateTicker = time.NewTicker(time.Second)
-	} else {
-		interval := time.Second / time.Duration(cfg.RateLimit)
-		if interval <= 0 {
-			interval = time.Second
-		}
-		rateTicker = time.NewTicker(interval)
-	}
-	defer rateTicker.Stop()
+    var completed int64 = 0
+    var resolved int64 = 0
+    start := time.Now()
 
-	// Cooldown manager
-	cdm := cooldown.NewManager()
-	cdm.StartWatcher()
+    var rateTicker *time.Ticker
+    if cfg.RateLimit <= 0 {
+        rateTicker = time.NewTicker(time.Second)
+    } else {
+        interval := time.Second / time.Duration(cfg.RateLimit)
+        if interval <= 0 {
+            interval = time.Second
+        }
+        rateTicker = time.NewTicker(interval)
+    }
+    defer rateTicker.Stop()
 
-	// Progress bar
-	pb := progressBar.NewProgressBar(int(total), "Resolving domains", "green")
-	pb.StartAutoRender(func() (int64, int64, bool, int64) {
-		cur := atomic.LoadInt64(&completed)
-		return cur, total, cdm.Active(), cdm.Remaining()
-	})
+    cdm := cooldown.NewManager()
+    cdm.StartWatcher()
 
-	var wg sync.WaitGroup
+    pb := progressBar.NewProgressBar(int(total), "Resolving domains", "green")
+    pb.StartAutoRender(func() (int64, int64, bool, int64) {
+        cur := atomic.LoadInt64(&completed)
+        return cur, total, cdm.Active(), cdm.Remaining()
+    })
 
-	// -------------------------
-	// TTL for Redis cache (FIX)
-	// -------------------------
-	successTTL := 48 * time.Hour // success stays cached long
-	failTTL := 10 * time.Second  // failure cache expires fast
+    var wg sync.WaitGroup
 
-	// Dispatch jobs
-	for _, domain := range allGenerated {
-		d := domain
+    successTTL := 48 * time.Hour
+    failTTL := 10 * time.Second
 
-		taskFunc := func(ctx context.Context) (interface{}, []string, []string, []error) {
+    for _, domain := range allGenerated {
+        d := domain
 
-			// Redis lookup BEFORE DNS (use short context so Redis can't block forever)
-			if rdb != nil {
-				cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-				cached, err := rdb.GetValue(cacheCtx, "dns:"+d)
-				cancel()
-				if err == nil {
-					if cached == "1" {
-						return d, nil, nil, nil
-					}
-					if cached == "0" {
-						return nil, nil, nil, nil
-					}
-				}
-			}
+        taskFunc := func(ctx context.Context) (interface{}, []string, []string, []error) {
 
-			// cooldown + rate-limit (context-aware)
-			if cdm.Active() {
-				select {
-				case <-ctx.Done():
-					return nil, nil, nil, []error{ctx.Err()}
-				case <-cdm.Gate():
-				}
-			}
+            if rdb != nil {
+                cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+                cached, err := rdb.GetValue(cacheCtx, "dns:"+d)
+                cancel()
+                if err == nil {
+                    if cached == "1" {
+                        return d, nil, nil, nil
+                    }
+                    if cached == "0" {
+                        return nil, nil, nil, nil
+                    }
+                }
+            }
 
-			select {
-			case <-ctx.Done():
-				return nil, nil, nil, []error{ctx.Err()}
-			case <-rateTicker.C:
-			}
+            if cdm.Active() {
+                select {
+                case <-ctx.Done():
+                    return nil, nil, nil, []error{ctx.Err()}
+                case <-cdm.Gate():
+                }
+            }
 
-			ok, _ := dns.Resolve(ctx, d)
+            select {
+            case <-ctx.Done():
+                return nil, nil, nil, []error{ctx.Err()}
+            case <-rateTicker.C:
+            }
 
-			if ok {
-				// async best-effort set (short timeout)
-				if rdb != nil {
-					go func(domain string) {
-						cctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-						_ = rdb.SetValue(cctx, "dns:"+domain, "1", successTTL)
-						cancel()
-					}(d)
-				}
-				return d, nil, nil, nil
-			}
+            ok, _ := dns.Resolve(ctx, d)
 
-			// fail TTL drastically reduced — write best-effort
-			if rdb != nil {
-				go func(domain string) {
-					cctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-					_ = rdb.SetValue(cctx, "dns:"+domain, "0", failTTL)
-					cancel()
-				}(d)
-			}
+            if ok {
+                if rdb != nil {
+                    go func(domain string) {
+                        cctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+                        _ = rdb.SetValue(cctx, "dns:"+domain, "1", successTTL)
+                        cancel()
+                    }(d)
+                }
+                return d, nil, nil, nil
+            }
 
-			return nil, nil, nil, nil
-		}
+            if rdb != nil {
+                go func(domain string) {
+                    cctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+                    _ = rdb.SetValue(cctx, "dns:"+domain, "0", failTTL)
+                    cancel()
+                }(d)
+            }
 
-		_, resCh, err := wp.SubmitTask(taskFunc, wpkg.Medium, 0)
-		if err != nil {
-			atomic.AddInt64(&completed, 1)
-			pb.Add(1)
-			continue
-		}
+            return nil, nil, nil, nil
+        }
 
-		wg.Add(1)
-		go func(rc <-chan wpkg.WorkerResult) {
-			defer wg.Done()
+        _, resCh, err := wp.SubmitTask(taskFunc, wpkg.Medium, 0)
+        if err != nil {
+            atomic.AddInt64(&completed, 1)
+            pb.Add(1)
+            continue
+        }
 
-			res, ok := <-rc
-			if !ok {
-				atomic.AddInt64(&completed, 1)
-				pb.Add(1)
-				return
-			}
+        wg.Add(1)
+        go func(rc <-chan wpkg.WorkerResult) {
+            defer wg.Done()
 
-			if s, ok := res.Result.(string); ok && s != "" {
-				// write to CSV (filewriter handles its own sync)
-				fw.WriteRow([]string{s})
-				atomic.AddInt64(&resolved, 1)
-			}
+            res, ok := <-rc
+            if !ok {
+                atomic.AddInt64(&completed, 1)
+                pb.Add(1)
+                return
+            }
 
-			newCount := atomic.AddInt64(&completed, 1)
-			pb.Add(1)
+            if s, ok := res.Result.(string); ok && s != "" {
+                fw.WriteRow([]string{s})
+                atomic.AddInt64(&resolved, 1)
+            }
 
-			if cfg.CooldownAfter > 0 && newCount%int64(cfg.CooldownAfter) == 0 {
-				cdm.Trigger(int64(cfg.CooldownDuration))
-			}
+            newCount := atomic.AddInt64(&completed, 1)
+            pb.Add(1)
 
-		}(resCh)
-	}
+            if cfg.CooldownAfter > 0 && newCount%int64(cfg.CooldownAfter) == 0 {
+                cdm.Trigger(int64(cfg.CooldownDuration))
+            }
 
-	// Wait
-	wg.Wait()
-	wp.Stop()
+        }(resCh)
+    }
 
-	// close CSV and progressbar
-	_ = fw.Close()
+    wg.Wait()
+    wp.Stop()
 
-	pb.StopAutoRender()
-	pb.Finish()
+    _ = fw.Close()
 
-	elapsed := time.Since(start).Truncate(time.Millisecond)
+    pb.StopAutoRender()
+    pb.Finish()
 
-	fmt.Printf("\n✔ Resolution complete. Time: %s | Total checked: %d\n", elapsed, total)
-	fmt.Printf("✔ Total Resolved Domains: %d\n", resolved)
-	fmt.Println("✔ Valid domains written to Input/Malicious_Domains.csv")
+    elapsed := time.Since(start).Truncate(time.Millisecond)
 
-	redis.Close()
+    // End timestamp (system time, 12-hour format, dd-mm-yy)
+    endTime := time.Now().Local()
+    fmt.Printf("\n[%s] Engine Finished\n",
+        endTime.Format("02-01-06 03:04:05 PM"))
+
+    fmt.Printf("✔ Resolution complete. Time: %s | Total checked: %d\n", elapsed, total)
+    fmt.Printf("✔ Total Resolved Domains: %d\n", resolved)
+    fmt.Println("✔ Valid domains written to Input/Malicious_Domains.csv")
+
+    redis.Close()
 }

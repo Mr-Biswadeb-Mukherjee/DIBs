@@ -2,7 +2,7 @@ package homograph
 
 import "strings"
 
-var HomoglyphMap = map[rune][]rune{
+var homoglyphMap = map[rune][]rune{
 	'a': {'а'},
 	'c': {'ϲ'},
 	'e': {'е'},
@@ -15,15 +15,15 @@ var HomoglyphMap = map[rune][]rune{
 	'v': {'ν'},
 }
 
-// GenerateHomographLabels returns SLD-only homograph variants.
-func GenerateHomographLabels(domain string) []string {
+// generateInternal performs homograph substitution on SLD (lowercased).
+func generateInternal(domain string) []string {
 	raw := strings.ToLower(domain)
 	chars := []rune(raw)
 
 	var out []string
 
 	for i, char := range chars {
-		if equivalents, ok := HomoglyphMap[char]; ok {
+		if equivalents, ok := homoglyphMap[char]; ok {
 			for _, eq := range equivalents {
 				mod := make([]rune, len(chars))
 				copy(mod, chars)
@@ -34,4 +34,12 @@ func GenerateHomographLabels(domain string) []string {
 	}
 
 	return out
+}
+
+// ---------------------------------------------------
+// UNCHANGEABLE PUBLIC API FUNCTION 
+// ---------------------------------------------------
+
+func Homograph(base string) []string {
+	return generateInternal(base)
 }

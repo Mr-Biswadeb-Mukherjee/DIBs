@@ -2,7 +2,6 @@ package typosquat
 
 import "strings"
 
-// qwertyMap is a simplified QWERTY keyboard adjacency map.
 var qwertyMap = map[rune][]rune{
 	'q': {'w', 'a'}, 'w': {'q', 'e', 's'}, 'e': {'w', 'r', 'd', 's'},
 	'r': {'e', 't', 'f', 'd'}, 't': {'r', 'y', 'g', 'f'}, 'y': {'t', 'u', 'h', 'g'},
@@ -18,8 +17,7 @@ var qwertyMap = map[rune][]rune{
 	'm': {'n', 'j', 'k'},
 }
 
-// GenerateOmissions removes exactly one character.
-func GenerateOmissions(domain string) []string {
+func generateOmissions(domain string) []string {
 	var out []string
 	chars := []rune(domain)
 
@@ -29,8 +27,7 @@ func GenerateOmissions(domain string) []string {
 	return out
 }
 
-// GenerateTranspositions swaps adjacent characters.
-func GenerateTranspositions(domain string) []string {
+func generateTranspositions(domain string) []string {
 	var out []string
 	chars := []rune(domain)
 
@@ -43,8 +40,7 @@ func GenerateTranspositions(domain string) []string {
 	return out
 }
 
-// GenerateSubstitutions replaces characters with QWERTY-adjacent keys.
-func GenerateSubstitutions(domain string) []string {
+func generateSubstitutions(domain string) []string {
 	var out []string
 	chars := []rune(domain)
 
@@ -61,33 +57,39 @@ func GenerateSubstitutions(domain string) []string {
 	return out
 }
 
-// GenerateTypoSquatLabels returns raw labels (no TLD applied).
-func GenerateTypoSquatLabels(base string) []string {
+func generateInternal(base string) []string {
 	raw := strings.ToLower(base)
 	unique := make(map[string]bool)
 
 	// omissions
-	for _, v := range GenerateOmissions(raw) {
+	for _, v := range generateOmissions(raw) {
 		unique[v] = true
 	}
 
-	// transposition
-	for _, v := range GenerateTranspositions(raw) {
+	// transpositions
+	for _, v := range generateTranspositions(raw) {
 		unique[v] = true
 	}
 
 	// substitutions
-	for _, v := range GenerateSubstitutions(raw) {
+	for _, v := range generateSubstitutions(raw) {
 		unique[v] = true
 	}
 
-	// convert to slice
+	// final filtered output
 	out := make([]string, 0, len(unique))
 	for label := range unique {
-		if len(label) >= 3 {
+		if len(label) >= 3 { // avoid garbage labels
 			out = append(out, label)
 		}
 	}
 
 	return out
+}
+
+// ---------------------------------------------------
+// UNCHANGEABLE PUBLIC API FUNCTION 
+// ---------------------------------------------------
+func TypoSquat(base string) []string {
+	return generateInternal(base)
 }
