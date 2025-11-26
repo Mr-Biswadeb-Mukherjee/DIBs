@@ -293,6 +293,7 @@ func Client() *RedisClient {
     return global
 }
 
+
 func (r *RedisClient) Close() error {
 	close(r.stopChan)
 	r.wg.Wait()
@@ -321,6 +322,7 @@ func Init() error {
 	global = rc
 	return nil
 }
+
 
 func Set(key string, v interface{}) error {
 	return global.SetValue(context.Background(), key, v, 0)
@@ -353,6 +355,19 @@ func HGet(key, field string) (string, error) {
 func ExecTx(fn func(pipe redis.Pipeliner) error) error {
 	return global.ExecTx(context.Background(), fn)
 }
+
+func (r *RedisClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
+
+    // Apply prefix to each key
+    realKeys := make([]string, len(keys))
+    for i, k := range keys {
+        realKeys[i] = r.key(k)
+    }
+
+    // Eval requires args as ...interface{}
+    return r.client.Eval(ctx, script, realKeys, args...).Result()
+}
+
 
 func Close() error {
 	if global == nil {
