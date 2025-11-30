@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/official-biswadeb941/Infermal_v2/Modules/DNS"
+	dns "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/DNS"
 )
 
 // ------------------------------------------------------------

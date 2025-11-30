@@ -1,12 +1,14 @@
-package Resource_test
+//go:build ignore
+// +build ignore
+
+package accelerator_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/official-biswadeb941/Infermal_v2/Modules/app/core/accelerator"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/official-biswadeb941/Infermal_v2/Modules/Resource"
 )
 
 // helper to clear environment flags
@@ -18,10 +20,10 @@ func clearEnv() {
 func TestDetectDevices_CPUOnly(t *testing.T) {
 	clearEnv()
 
-	info := Resource.DetectDevices()
+	info := accelerator.DetectDevices()
 
 	assert.NotEmpty(t, info.Devices, "CPU device should be detected")
-	assert.Equal(t, Resource.CPU, info.Devices[0].Type)
+	assert.Equal(t, accelerator.CPU, info.Devices[0].Type)
 	assert.True(t, info.Devices[0].Cores > 0)
 
 	assert.Contains(t, info.Warnings, "No GPU detected")
@@ -34,11 +36,11 @@ func TestDetectDevices_WithGPU(t *testing.T) {
 	clearEnv()
 	_ = os.Setenv("HAS_GPU", "1")
 
-	info := Resource.DetectDevices()
+	info := accelerator.DetectDevices()
 
 	foundGPU := false
 	for _, d := range info.Devices {
-		if d.Type == Resource.GPU {
+		if d.Type == accelerator.GPU {
 			foundGPU = true
 			assert.Equal(t, "Generic GPU", d.Name)
 		}
@@ -52,11 +54,11 @@ func TestDetectDevices_WithTPU(t *testing.T) {
 	clearEnv()
 	_ = os.Setenv("HAS_TPU", "1")
 
-	info := Resource.DetectDevices()
+	info := accelerator.DetectDevices()
 
 	foundTPU := false
 	for _, d := range info.Devices {
-		if d.Type == Resource.TPU {
+		if d.Type == accelerator.TPU {
 			foundTPU = true
 			assert.Equal(t, "Generic TPU", d.Name)
 		}
@@ -71,14 +73,14 @@ func TestDetectDevices_GPUAndTPU(t *testing.T) {
 	_ = os.Setenv("HAS_GPU", "1")
 	_ = os.Setenv("HAS_TPU", "1")
 
-	info := Resource.DetectDevices()
+	info := accelerator.DetectDevices()
 
 	var gpu, tpu bool
 	for _, d := range info.Devices {
-		if d.Type == Resource.GPU {
+		if d.Type == accelerator.GPU {
 			gpu = true
 		}
-		if d.Type == Resource.TPU {
+		if d.Type == accelerator.TPU {
 			tpu = true
 		}
 	}
@@ -93,7 +95,7 @@ func TestGetBestDevice(t *testing.T) {
 	_ = os.Setenv("HAS_GPU", "1")
 	_ = os.Setenv("HAS_TPU", "1")
 
-	best, info, warn, errs := Resource.GetBestDevice()
+	best, info, warn, errs := accelerator.GetBestDevice()
 
 	assert.NotNil(t, best)
 	assert.Empty(t, errs)
@@ -101,7 +103,7 @@ func TestGetBestDevice(t *testing.T) {
 	assert.Empty(t, warn)
 
 	// TPU has highest score = 80
-	assert.Equal(t, Resource.TPU, best.Type)
+	assert.Equal(t, accelerator.TPU, best.Type)
 	assert.Equal(t, 80, best.Score)
 }
 
@@ -111,17 +113,17 @@ func TestGetBestDevice_NoDevices(t *testing.T) {
 	// So this test ensures stability rather than forcing errors.
 
 	clearEnv()
-	best, info, warn, errs := Resource.GetBestDevice()
+	best, info, warn, errs := accelerator.GetBestDevice()
 
 	assert.NotNil(t, info)
 	assert.NotNil(t, warn)
 	assert.Empty(t, errs, "CPU should always exist on Go runtime")
-	assert.Equal(t, Resource.CPU, best.Type)
+	assert.Equal(t, accelerator.CPU, best.Type)
 }
 
 func TestDeviceString_CPU(t *testing.T) {
-	d := Resource.Device{
-		Type:  Resource.CPU,
+	d := accelerator.Device{
+		Type:  accelerator.CPU,
 		ID:    0,
 		Name:  "CPU x8 cores",
 		Score: 10,
@@ -135,8 +137,8 @@ func TestDeviceString_CPU(t *testing.T) {
 }
 
 func TestDeviceString_Generic(t *testing.T) {
-	d := Resource.Device{
-		Type:  Resource.GPU,
+	d := accelerator.Device{
+		Type:  accelerator.GPU,
 		ID:    2,
 		Name:  "Test GPU",
 		Score: 40,

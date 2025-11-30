@@ -6,13 +6,13 @@ import (
 	"os"
 	"strings"
 
-	bs "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Bitsquatting"
-	cs "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Combosquat"
-	hg "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Homograph"
-	jw "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Jarowinkler"
-	ss2 "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Soundsquat"
-	ss1 "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Subdomain_squat"
-	ts "github.com/official-biswadeb941/Infermal_v2/Modules/Domain_Generator/Typo_squat"
+	bs "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/bitsquatting"
+	cs "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/combo_squat"
+	hg "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/homograph"
+	jw "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/jarowinkler"
+	ss2 "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/sound_squat"
+	ss1 "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/subdomain_squat"
+	ts "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/dga/typo_squat"
 )
 
 // Default target TLDs

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/official-biswadeb941/Infermal_v2/Modules/Filewriter"
+	"github.com/official-biswadeb941/Infermal_v2/Modules/app/core/filewriter"
 )
 
 // ----------------------------------------------

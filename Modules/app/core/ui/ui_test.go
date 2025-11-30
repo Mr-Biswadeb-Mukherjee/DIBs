@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/official-biswadeb941/Infermal_v2/Modules/app/core/ui"
 	// Update if your module path differs
-	"github.com/official-biswadeb941/Infermal_v2/Modules/UI"
 )
 
 // ----------------------------------------------

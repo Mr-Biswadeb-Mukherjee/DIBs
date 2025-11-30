@@ -1,5 +1,3 @@
-//dns.go
-
 package dns
 
 import (
@@ -7,24 +5,28 @@ import (
 	"errors"
 	"time"
 
-	stubresolver "github.com/official-biswadeb941/Infermal_v2/Modules/DNS/stub-resolver"
+	stubresolver "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/DNS/sResolver"
 )
 
 //
 // ===================================================
-//               PUBLIC STABLE API LAYER
+//                   PUBLIC API
 // ===================================================
 //
-// These functions MUST NEVER change. They form the
-// external contract that app.go and other upper-level
-// orchestrators depend on.
+// Fully backward compatible with your previous version.
+// Now internally uses an injected DNS instance instead
+// of global state.
 //
 
-// globalDNS holds the shared instance created via InitDNS.
-var globalDNS *DNS
+// -------------------------------------------------------------------
+// IMPORTANT: the public API historically depended on globalDNS.
+// We keep the functions, but now they simply call the injected engine.
+// -------------------------------------------------------------------
 
-// InitDNS initializes the DNS subsystem using the provided config.
-// This function signature must remain unchanged forever.
+var defaultDNS *DNS
+
+// InitDNS creates a DNS engine and sets it as the default resolver.
+// This maintains compatibility with your original API.
 func InitDNS(cfg Config) (*DNS, error) {
 	d := New(cfg)
 
@@ -32,42 +34,58 @@ func InitDNS(cfg Config) (*DNS, error) {
 		return nil, errors.New("dns: upstream resolver not set")
 	}
 
-	globalDNS = d
+	// Assign to defaultDNS for backward compatibility
+	defaultDNS = d
 	return d, nil
 }
 
-// ResolveDomain is the simple, top-level resolver used by app.go.
-// Even if internal logic changes, this must remain compatible.
+// ResolveDomain uses the defaultDNS engine.
+// Fully backward compatible.
 func ResolveDomain(domain string) (bool, error) {
-	if globalDNS == nil {
+	if defaultDNS == nil {
 		return false, errors.New("dns: module not initialized (InitDNS not called)")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	return globalDNS.Resolve(ctx, domain)
+	return defaultDNS.Resolve(ctx, domain)
 }
 
-// ResolveWithContext allows advanced callers to provide their own context.
-// Signature MUST remain unchanged.
+// ResolveWithContext uses the injected defaultDNS.
+// Fully backward compatible.
 func ResolveWithContext(ctx context.Context, domain string) (bool, error) {
-	if globalDNS == nil {
+	if defaultDNS == nil {
 		return false, errors.New("dns: module not initialized (InitDNS not called)")
 	}
-	return globalDNS.Resolve(ctx, domain)
+	return defaultDNS.Resolve(ctx, domain)
 }
 
-// Health returns nil when DNS is ready.
-// Signature MUST remain unchanged.
+// Health checks whether DNS is ready.
+// Fully backward compatible.
 func Health() error {
-	if globalDNS == nil {
+	if defaultDNS == nil {
 		return errors.New("dns: not initialized")
 	}
-	if globalDNS.primary == nil {
+	if defaultDNS.primary == nil {
 		return errors.New("dns: primary resolver missing")
 	}
 	return nil
+}
+
+//
+// ===================================================
+//                   INJECTION API
+// ===================================================
+//
+// This is the new, cleaner interface that recon.go and app.go
+// will use to avoid ANY global state.
+//
+
+// DNSResolver is the interface implemented by *DNS.
+// Recon and App will depend on this instead of using globals.
+type DNSResolver interface {
+	Resolve(ctx context.Context, domain string) (bool, error)
 }
 
 //
@@ -104,52 +122,46 @@ func New(cfg Config) *DNS {
 	}
 
 	return &DNS{
-		primary: primary,
-		backup:  backup,
-		// recursive stays nil until AttachRecursive is called
+		primary:   primary,
+		backup:    backup,
+		recursive: nil, // stays nil until AttachRecursive is used
+		cache:     nil, // app.go will attach redis cache via setter
 	}
 }
 
 //
 // ===================================================
-//                   RESOLUTION
+//                     RESOLUTION
 // ===================================================
 //
+// Exactly the same behavior as original version.
+// NO GLOBAL LOOKUPS. Uses engine-local cache.
+// Fully compatible with caching system.
+//
 
-// Resolve orchestrates domain evaluation through:
-// 1) Optional cache
-// 2) Primary resolver
-// 3) Backup resolver
-// 4) Recursive resolver
 func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
 
-	//
-	// 0) CACHE LOOKUP (non-blocking with timeout)
-	//
+	// 0) CACHE LOOKUP
 	if d.cache != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		val, err := d.cache.GetValue(cacheCtx, "dns:"+domain)
 		cancel()
 
 		if err == nil {
-			switch val {
-			case "1":
+			if val == "1" {
 				return true, nil
-			case "0":
+			}
+			if val == "0" {
 				return false, nil
 			}
 		}
 	}
 
-	//
-	// Prepare strict per-domain timeout
-	//
+	// Domain-level timeout
 	domainCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancel()
 
-	//
 	// 1) PRIMARY RESOLVER
-	//
 	if d.primary == nil {
 		return false, errors.New("dns: primary resolver not configured")
 	}
@@ -160,9 +172,7 @@ func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
 		return true, nil
 	}
 
-	//
-	// 2) BACKUP RESOLVER (optional)
-	//
+	// 2) BACKUP RESOLVER
 	if d.backup != nil {
 		ok2, err2 := d.backup.Resolve(domainCtx, domain)
 		if err2 == nil && ok2 {
@@ -171,9 +181,7 @@ func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
 		}
 	}
 
-	//
 	// 3) RECURSIVE RESOLVER (optional)
-	//
 	if d.recursive != nil {
 		ok3, err3 := d.recursive.Resolve(domainCtx, domain)
 		if err3 == nil && ok3 {
@@ -182,20 +190,19 @@ func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
 		}
 	}
 
-	//
-	// ALL FAILED → cache negative result
-	//
+	// All resolvers failed → Cache negative
 	d.asyncCacheWrite(domain, "0", 12*time.Hour)
 
 	if err != nil {
 		return false, err
 	}
+
 	return false, errors.New("dns: no records found")
 }
 
 //
 // ===================================================
-//           INTERNAL: ASYNC CACHE WRITER
+//              INTERNAL ASYNC CACHE WRITER
 // ===================================================
 //
 

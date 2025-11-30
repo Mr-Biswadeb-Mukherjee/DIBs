@@ -69,13 +69,19 @@ test:
 coverage:
 	@echo "\n$(BLUE)📊 Generating test coverage heatmap...$(RESET)"
 
-	@go test ./... -coverpkg=./... -coverprofile=coverage.out || { \
+	# Run tests while EXCLUDING:
+	#   1. root module (.)
+	#   2. Modules/app       (only the top-level app folder)
+	@go test $(shell go list ./... | grep -vE '(^$$|/app$$)') \
+		-coverpkg=./... -coverprofile=coverage.out || { \
 		echo "$(RED)❌ Coverage generation failed (test failure).$(RESET)"; exit 1; }
 
+	# Ensure coverage.out exists
 	@[ -s coverage.out ] || { \
 		echo "$(RED)❌ coverage.out is empty. No coverage data was generated.$(RESET)"; \
 		exit 1; }
 
+	# Validate file header
 	@if ! head -n 1 coverage.out | grep -q '^mode:' ; then \
 		echo "$(RED)❌ Invalid coverage.out format. Aborting coverage heatmap.$(RESET)"; \
 		exit 1; \

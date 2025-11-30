@@ -1,4 +1,4 @@
-//progressbar.go
+//progressBar.go
 
 package progressBar
 

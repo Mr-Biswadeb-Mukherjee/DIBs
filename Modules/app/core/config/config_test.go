@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/official-biswadeb941/Infermal_v2/Modules/Config"
+	"github.com/official-biswadeb941/Infermal_v2/Modules/app/core/config"
 )
 
 // ----------------------------------------------

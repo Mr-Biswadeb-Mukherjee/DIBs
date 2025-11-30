@@ -1,4 +1,4 @@
-package stubresolver
+package sresolver
 
 import (
 	"context"
