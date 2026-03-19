@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	stubresolver "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/DNS/sResolver"
@@ -94,12 +95,13 @@ type DNSResolver interface {
 // ===================================================
 //
 
-func New(cfg Config) *DNS {
+func New(cfg Config, loggers ...ModuleLogger) *DNS {
 	timeout := time.Duration(cfg.TimeoutMS) * time.Millisecond
 	delay := time.Duration(cfg.DelayMS) * time.Millisecond
 	if delay <= 0 {
 		delay = 50 * time.Millisecond
 	}
+	lg := firstLogger(loggers)
 
 	var primary Resolver
 	if cfg.Upstream != "" {
@@ -127,6 +129,7 @@ func New(cfg Config) *DNS {
 		recursive: nil, // stays nil until AttachRecursive is used
 		system:    stubresolver.NewSystem(),
 		cache:     nil, // app.go will attach redis cache via setter
+		logger:    lg,
 	}
 }
 
@@ -141,24 +144,15 @@ func New(cfg Config) *DNS {
 //
 
 func (d *DNS) Resolve(ctx context.Context, domain string) (bool, error) {
-
-	// 0) CACHE LOOKUP
-	if d.cache != nil {
-		cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		val, err := d.cache.GetValue(cacheCtx, "dns:"+domain)
-		cancel()
-
-		if err == nil {
-			if val == "1" {
-				return true, nil
-			}
-			if val == "0" {
-				return false, nil
-			}
-		}
+	if val, hit := d.readCache(ctx, domain); hit {
+		return val, nil
 	}
 
 	ok, err := d.resolveWithAdaptiveFallback(ctx, domain)
+	if err != nil {
+		d.warnf("dns resolve failed domain=%s err=%v", domain, err)
+	}
+
 	if ok {
 		d.asyncCacheWrite(domain, "1", 48*time.Hour)
 		return true, nil
@@ -181,7 +175,52 @@ func (d *DNS) asyncCacheWrite(domain string, val string, ttl time.Duration) {
 
 	go func() {
 		cctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-		_ = d.cache.SetValue(cctx, "dns:"+domain, val, ttl)
+		if err := d.cache.SetValue(cctx, "dns:"+domain, val, ttl); err != nil {
+			d.warnf("dns cache write failed key=dns:%s err=%v", domain, err)
+		}
 		cancel()
 	}()
+}
+
+func (d *DNS) readCache(ctx context.Context, domain string) (bool, bool) {
+	if d.cache == nil {
+		return false, false
+	}
+
+	cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	val, err := d.cache.GetValue(cacheCtx, "dns:"+domain)
+	cancel()
+
+	if err != nil {
+		if shouldLogCacheReadError(err) {
+			d.warnf("dns cache read failed key=dns:%s err=%v", domain, err)
+		}
+		return false, false
+	}
+
+	if val == "1" {
+		return true, true
+	}
+	if val == "0" {
+		return false, true
+	}
+	return false, false
+}
+
+func firstLogger(loggers []ModuleLogger) ModuleLogger {
+	if len(loggers) == 0 {
+		return nil
+	}
+	return loggers[0]
+}
+
+func shouldLogCacheReadError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "not found") {
+		return false
+	}
+	if strings.Contains(msg, "redis: nil") {
+		return false
+	}
+	return true
 }

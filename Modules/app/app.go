@@ -13,6 +13,7 @@ import (
 	config "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/config"
 	cooldown "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/cooldown"
 	filewriter "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/filewriter"
+	logger "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/logger"
 	progressBar "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/progressBar"
 	ratelimiter "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/ratelimiter"
 	redis "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/redis"
@@ -21,6 +22,25 @@ import (
 )
 
 func Run(parentCtx context.Context) error {
+	_ = parentCtx
+	appLog := logger.NewLogger("app")
+	dnsLog := logger.NewLogger("dns")
+	rateLimiterLog := logger.NewLogger("ratelimiter")
+	defer appLog.Close()
+	defer dnsLog.Close()
+	defer rateLimiterLog.Close()
+
+	const maxModuleErrorLogs = 25
+	var moduleErrorCount int64
+	logModuleError := func(module, scope string, err error) {
+		if err == nil {
+			return
+		}
+		if atomic.AddInt64(&moduleErrorCount, 1) > maxModuleErrorLogs {
+			return
+		}
+		appLog.Warning("%s error scope=%s err=%v", module, scope, err)
+	}
 
 	// UI start animation
 	animStop := make(chan struct{})
@@ -31,22 +51,25 @@ func Run(parentCtx context.Context) error {
 	cfg, err := config.LoadOrCreateConfig("Setting/setting.conf")
 	if err != nil {
 		close(animStop)
+		appLog.Alert("config load failed: %v", err)
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
 	// Redis init
 	if err := redis.Init(); err != nil {
 		close(animStop)
+		appLog.Alert("redis init failed: %v", err)
 		return fmt.Errorf("error initializing redis: %w", err)
 	}
 	rdb := redis.Client()
+	defer redis.Close()
 
 	// Rate limiter
 	limit := cfg.RateLimit
 	if limit <= 0 {
 		limit = 999999999
 	}
-	ratelimiter.Init(rdb, time.Second, int64(limit))
+	ratelimiter.Init(rdb, time.Second, int64(limit), rateLimiterLog)
 
 	// Recon init
 	re := recon.New(
@@ -54,12 +77,14 @@ func Run(parentCtx context.Context) error {
 		cfg.BackupDNS,
 		int(cfg.DNSRetries),
 		int(cfg.DNSTimeoutMS),
+		dnsLog,
 	)
 
 	// Domain generation
 	allGenerated, err := recon.GenerateDomains("Input/Keywords.csv")
 	if err != nil {
 		close(animStop)
+		appLog.Alert("domain generation failed: %v", err)
 		return fmt.Errorf("error processing Keywords.csv: %w", err)
 	}
 
@@ -74,6 +99,7 @@ func Run(parentCtx context.Context) error {
 	fw, err := filewriter.SafeNewCSVWriter("Input/Domains.csv", filewriter.Overwrite)
 	if err != nil {
 		close(animStop)
+		appLog.Alert("csv writer init failed: %v", err)
 		return fmt.Errorf("error opening csv writer: %w", err)
 	}
 
@@ -145,6 +171,7 @@ func Run(parentCtx context.Context) error {
 				}
 				allowed, err := ratelimiter.RateLimit(ctx, "dns-rate")
 				if err != nil {
+					logModuleError("ratelimiter", d, err)
 					break
 				}
 				if allowed {
@@ -153,19 +180,25 @@ func Run(parentCtx context.Context) error {
 				time.Sleep(10 * time.Millisecond)
 			}
 
-			ok, _ := re.Resolve(ctx, d)
+			ok, resolveErr := re.Resolve(ctx, d)
+			logModuleError("dns", d, resolveErr)
 
 			if ok {
-				rdb.SetValue(context.Background(), "dns:"+d, "1", successTTL)
+				if err := rdb.SetValue(context.Background(), "dns:"+d, "1", successTTL); err != nil {
+					logModuleError("redis-cache-write", d, err)
+				}
 				return d, nil, nil, nil
 			}
 
-			rdb.SetValue(context.Background(), "dns:"+d, "0", failTTL)
+			if err := rdb.SetValue(context.Background(), "dns:"+d, "0", failTTL); err != nil {
+				logModuleError("redis-cache-write", d, err)
+			}
 			return nil, nil, nil, nil
 		}
 
 		_, resCh, err := wp.SubmitTask(taskFunc, wpkg.Medium, 0)
 		if err != nil {
+			logModuleError("worker-submit", d, err)
 			atomic.AddInt64(&completed, 1)
 			pb.Add(1)
 			continue
@@ -185,6 +218,9 @@ func Run(parentCtx context.Context) error {
 			if s, ok := res.Result.(string); ok && s != "" {
 				fw.WriteRow([]string{s})
 				atomic.AddInt64(&resolved, 1)
+			}
+			for _, taskErr := range res.Errors {
+				logModuleError("worker-task", "result", taskErr)
 			}
 
 			newCount := atomic.AddInt64(&completed, 1)
@@ -206,8 +242,7 @@ func Run(parentCtx context.Context) error {
 
 	ui.EndBanner(startTime, total, resolved)
 	fmt.Println("✔ Valid domains written to Input/Domains.csv")
-
-	redis.Close()
+	appLog.Info("run completed generated=%d resolved=%d", total, resolved)
 
 	return nil
 }

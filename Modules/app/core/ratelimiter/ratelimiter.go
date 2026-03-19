@@ -16,6 +16,12 @@ type RedisStore interface {
 	Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
 }
 
+// ModuleLogger is implemented in logger module and injected by app.
+// Ratelimiter must not import logger directly.
+type ModuleLogger interface {
+	Warning(format string, v ...interface{})
+}
+
 // ----------------------------------------------
 // Sliding Window Rate Limiter (Redis + Lua)
 // ----------------------------------------------
@@ -23,13 +29,20 @@ type SlidingWindowLimiter struct {
 	rdb     RedisStore
 	window  time.Duration
 	maxHits int64
+	logger  ModuleLogger
 }
 
-func newSlidingWindowLimiter(rdb RedisStore, window time.Duration, maxHits int64) *SlidingWindowLimiter {
+func newSlidingWindowLimiter(
+	rdb RedisStore,
+	window time.Duration,
+	maxHits int64,
+	logger ModuleLogger,
+) *SlidingWindowLimiter {
 	return &SlidingWindowLimiter{
 		rdb:     rdb,
 		window:  window,
 		maxHits: maxHits,
+		logger:  logger,
 	}
 }
 
@@ -49,9 +62,9 @@ var (
 
 // Init sets up the global limiter instance.
 // This is a stable API that will not change.
-func Init(rdb RedisStore, window time.Duration, maxHits int64) {
+func Init(rdb RedisStore, window time.Duration, maxHits int64, loggers ...ModuleLogger) {
 	instanceOnce.Do(func() {
-		instance = newSlidingWindowLimiter(rdb, window, maxHits)
+		instance = newSlidingWindowLimiter(rdb, window, maxHits, firstLogger(loggers))
 	})
 }
 
@@ -112,6 +125,7 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, key string) (bool, err
 		now,
 	)
 	if err != nil {
+		l.warnf("ratelimiter eval failed key=%s err=%v", key, err)
 		return false, err
 	}
 
@@ -120,8 +134,23 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, key string) (bool, err
 		if f, ok := res.(float64); ok {
 			return int64(f) == 1, nil
 		}
+		l.warnf("ratelimiter unexpected redis result type key=%s type=%T", key, res)
 		return false, nil
 	}
 
 	return allowed == 1, nil
+}
+
+func firstLogger(loggers []ModuleLogger) ModuleLogger {
+	if len(loggers) == 0 {
+		return nil
+	}
+	return loggers[0]
+}
+
+func (l *SlidingWindowLimiter) warnf(format string, v ...interface{}) {
+	if l == nil || l.logger == nil {
+		return
+	}
+	l.logger.Warning(format, v...)
 }

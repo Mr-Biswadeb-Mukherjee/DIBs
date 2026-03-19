@@ -17,6 +17,12 @@ type Cache interface {
 	SetValue(ctx context.Context, key string, v interface{}, ttl time.Duration) error
 }
 
+// ModuleLogger is injected by app/recon and implemented by logger module.
+// DNS must not import logger directly.
+type ModuleLogger interface {
+	Warning(format string, v ...interface{})
+}
+
 // ---------------------------------------------------
 //
 //	RESOLVER INTERFACE
@@ -50,6 +56,7 @@ type DNS struct {
 	recursive Resolver
 	system    Resolver
 	cache     Cache
+	logger    ModuleLogger
 }
 
 // ---------------------------------------------------
@@ -63,6 +70,10 @@ func (d *DNS) AttachRecursive(r Resolver) {
 
 func (d *DNS) AttachCache(c Cache) {
 	d.cache = c
+}
+
+func (d *DNS) AttachLogger(l ModuleLogger) {
+	d.logger = l
 }
 
 //
@@ -81,4 +92,11 @@ func (d *DNS) SwapBackup(r Resolver) {
 
 func (d *DNS) SwapSystem(r Resolver) {
 	d.system = r
+}
+
+func (d *DNS) warnf(format string, v ...interface{}) {
+	if d == nil || d.logger == nil {
+		return
+	}
+	d.logger.Warning(format, v...)
 }

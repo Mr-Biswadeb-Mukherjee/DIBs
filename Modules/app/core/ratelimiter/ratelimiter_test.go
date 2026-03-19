@@ -89,7 +89,7 @@ func resetInstance() {
 func TestNewSlidingWindowLimiter(t *testing.T) {
 	r := newFakeRedis()
 	w := time.Second
-	lim := newSlidingWindowLimiter(r, w, 5)
+	lim := newSlidingWindowLimiter(r, w, 5, nil)
 
 	if lim.rdb != r {
 		t.Fatalf("rdb mismatch")

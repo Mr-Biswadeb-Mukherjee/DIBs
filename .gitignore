@@ -29,6 +29,7 @@ Thumbs.db
 
 # Logs
 *.log
+Logs/
 
 # Project specific exclusions
 Setting/setting.conf

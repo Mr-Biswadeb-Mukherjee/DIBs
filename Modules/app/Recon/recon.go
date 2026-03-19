@@ -18,14 +18,19 @@ type Recon struct {
 }
 
 // New builds a DNS engine using only primitive parameters.
-// No external imports beyond dnsengine.
-func New(upstream, backup string, retries int, timeoutMS int) *Recon {
+// Logger is optional and injected by app without direct package coupling.
+func New(
+	upstream, backup string,
+	retries int,
+	timeoutMS int,
+	loggers ...dnsengine.ModuleLogger,
+) *Recon {
 	engine := dnsengine.New(dnsengine.Config{
 		Upstream:  upstream,
 		Backup:    backup,
 		Retries:   retries,
 		TimeoutMS: int64(timeoutMS), // FIXED: Cast int → int64
-	})
+	}, loggers...)
 
 	return &Recon{
 		DNS: engine, // FIXED: no Engine type required
