@@ -1,137 +1,269 @@
-# 🌀 Infermal_v2  
-**Domain Intelligence and DNS Behavior Analysis Framework**
+# 🌀 Infermal_v2
 
-Infermal_v2 is a modular framework for generating, resolving, analyzing, and correlating domain-level intelligence at scale. It combines DNS analytics, OSINT techniques, domain-mutation logic, enrichment workflows, and worker-driven processing into a complete lifecycle system for domain intelligence.
+### Domain Intelligence and DNS Behavior Analysis Framework
 
----
-
-## 🧭 Background and Motivation
-
-In 2024, ICANN and KORLabs published the **INFERMAL** project (Inferential Analysis of Maliciously Registered Domains), a study focused on registration-time characteristics such as registrar behavior, pricing, verification indicators, and TLD patterns. The publication demonstrated the value of domain-focused intelligence research.
-
-**Infermal_v2 is not affiliated with, endorsed by, or derived from ICANN or KORLabs' INFERMAL project.**  
-References to INFERMAL are included only to provide context for the importance of domain-centric studies.
-
-Infermal_v2 takes a different approach by analyzing **behavioral and DNS lifecycle patterns**, emphasizing DNS activity, infrastructure evolution, and operational fingerprints.
+![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Build](https://img.shields.io/badge/Build-Passing-brightgreen)
+![Status](https://img.shields.io/badge/Status-Active-blue)
+![Contributions](https://img.shields.io/badge/Contributions-Welcome-orange)
 
 ---
 
-## 🚀 Overview
+## 📌 Overview
 
-Infermal_v2 follows an end-to-end domain intelligence pipeline:
+**Infermal_v2** is a modular, high-performance framework for generating, resolving, analyzing, and correlating domain intelligence at scale.
 
-**Domain Generation → DNS Resolution → Intelligence Extraction → Correlation → Output**
+It combines:
 
-The framework is intended for:
+* DNS analytics
+* OSINT techniques
+* Domain mutation logic
+* Distributed worker pipelines
+* Intelligence enrichment
 
-- OSINT analysts  
-- Threat intelligence teams  
-- Red team operators  
-- Incident responders  
-- Large-scale DNS telemetry analysts  
+into a unified lifecycle system:
 
-It is implemented in Go to support fast, concurrent data processing across high-volume workloads.
-
----
-
-## ✨ Key Features
-
-### 1. Domain Mutation and Squatting Algorithms
-
-Infermal_v2 can generate extensive domain variants to detect impersonation attempts, phishing surfaces, and potential adversarial infrastructure. Supported mutation techniques include:
-
-- Bitsquatting  
-- Combosquatting  
-- Homograph mutations  
-- Jaro–Winkler similarity  
-- Phonetic-based squatting  
-- Subdomain variations  
-- Typo-squatting  
+```
+Domain Generation → DNS Resolution → Intelligence Extraction → Correlation → Output
+```
 
 ---
 
-### 2. High-Speed DNS Processing
+## 🧭 Background
 
-The DNS engine provides recursive and stub resolution with adaptive cooldowns and throttling. A worker-based scheduling model enables large-scale domain resolution while respecting network and DNS infrastructure limits.
+The **INFERMAL (2024)** study by ICANN and KORLabs demonstrated the value of analyzing domain registration patterns.
 
-Supported record types include: **A, AAAA, CNAME, TXT, MX, SOA**, and others.
+> ⚠️ Infermal_v2 is an independent project and is **not affiliated with or derived from INFERMAL**.
 
----
+Unlike registration-focused research, Infermal_v2 focuses on:
 
-### 3. Domain Intelligence Extraction
-
-Infermal_v2 supports modular extractors that capture detailed DNS behavior and operational characteristics, such as:
-
-- TTL anomalies  
-- IP rotation and fast-flux patterns  
-- Domain parking indicators  
-- DNSSEC validation  
-- Nameserver behavior  
-- CNAME chain mapping  
-- DNS entropy and similarity metrics  
-
-These attributes collectively form a behavioral fingerprint for each domain.
+* DNS behavior
+* Infrastructure evolution
+* Operational patterns
+* Lifecycle-based intelligence
 
 ---
 
-### 4. Redis-Backed Worker Architecture
+## ⚙️ Architecture
 
-Redis powers the distributed processing layer, enabling:
-
-- Task queuing  
-- Caching  
-- Concurrency control  
-- Load distribution across workers  
-
-This architecture ensures scalability and predictable throughput during large batch operations.
+```
+                ┌──────────────────────┐
+                │ Domain Generator     │
+                └─────────┬────────────┘
+                          │
+                ┌─────────▼────────────┐
+                │ DNS Resolver Engine  │
+                └─────────┬────────────┘
+                          │
+                ┌─────────▼────────────┐
+                │ Intelligence Extract │
+                └─────────┬────────────┘
+                          │
+                ┌─────────▼────────────┐
+                │ Correlation Engine   │
+                └─────────┬────────────┘
+                          │
+                ┌─────────▼────────────┐
+                │ Output (CSV/JSON)    │
+                └──────────────────────┘
+```
 
 ---
 
-### 5. Output System
+## ✨ Features
 
-The Filewriter module provides structured results in formats suitable for downstream tools:
+### 🔹 Domain Mutation Engine
 
-- CSV  
-- JSON  
-- Custom output formats  
+Detect impersonation and adversarial domains using:
 
-This enables seamless integration with SIEM platforms, external pipelines, visualization tools, and analytical engines.
+* Bitsquatting
+* Typo-squatting
+* Combosquatting
+* Homograph attacks
+* Phonetic mutations
+* Jaro–Winkler similarity
+* Subdomain permutations
+
+---
+
+### 🔹 High-Speed DNS Engine
+
+* Recursive + stub resolution
+* Adaptive rate limiting
+* Worker-based concurrency
+* Supports:
+
+  ```
+  A, AAAA, CNAME, TXT, MX, SOA
+  ```
+
+---
+
+### 🔹 Intelligence Extraction
+
+Extract behavioral fingerprints:
+
+* TTL anomalies
+* Fast-flux / IP rotation
+* DNSSEC validation
+* Nameserver profiling
+* CNAME chain mapping
+* Entropy analysis
+
+---
+
+### 🔹 Distributed Processing (Redis)
+
+* Task queueing
+* Load distribution
+* Caching layer
+* Horizontal scalability
+
+---
+
+### 🔹 Output System
+
+Export structured intelligence:
+
+* JSON
+* CSV
+* Custom schemas
+
+Integrates easily with:
+
+* SIEM systems
+* Data pipelines
+* Visualization tools
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+* Go 1.21+
+* Redis
+* Linux (recommended)
+
+---
+
+### Installation
+
+```bash
+git clone https://github.com/yourusername/infermal_v2.git
+cd infermal_v2
+go mod tidy
+```
+
+---
+
+### Configuration
+
+Create a config file:
+
+```yaml
+redis:
+  host: localhost
+  port: 6379
+
+dns:
+  timeout: 3s
+  retries: 2
+
+workers:
+  count: 50
+```
+
+---
+
+### Run
+
+```bash
+go run main.go
+```
+
+---
+
+## 📂 Project Structure
+
+```
+infermal_v2/
+│
+├── cmd/                # Entry points
+├── internal/
+│   ├── generator/      # Domain mutation logic
+│   ├── resolver/       # DNS engine
+│   ├── extractor/      # Intelligence extraction
+│   ├── correlator/     # Analysis engine
+│   ├── worker/         # Worker pool + Redis
+│   └── output/         # File writers
+│
+├── configs/
+├── scripts/
+├── test/
+└── main.go
+```
+
+---
+
+## 🧠 Use Cases
+
+* Threat intelligence enrichment
+* Phishing infrastructure detection
+* Domain monitoring at scale
+* Red team reconnaissance
+* Incident response analysis
+* DNS telemetry research
 
 ---
 
 ## 📜 License
 
-Add your preferred license (MIT, Apache-2.0, GPL, or a custom license) and include it as a `LICENSE` file at the repository root.
+This project is licensed under the **MIT License**.
+See the `LICENSE` file for details.
 
 ---
 
-## 🤝 Contributions
+## 🤝 Contributing
 
-Contributions are welcome through pull requests and discussions in GitHub issues.  
-For major changes, create an issue first to outline proposed design and architectural considerations.
+Contributions are welcome.
+
+### Workflow:
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+For major changes, open an issue first to discuss:
+
+* Design approach
+* Architectural impact
+* Performance considerations
 
 ---
 
-## 🎯 Project Vision
+## 🎯 Vision
 
-Infermal_v2 aims to deliver a scalable framework for analyzing how domains behave across the internet ecosystem. While research such as ICANN/KORLabs' INFERMAL study focuses on registration patterns, Infermal_v2 shifts attention to DNS behavior, lifecycle characteristics, and operational indicators that reveal active threats.
+Infermal_v2 aims to become a **unified domain intelligence platform** by combining:
 
-The long-term goal is to merge OSINT, DNS telemetry, and automated enrichment into a unified and extensible intelligence platform.
+* OSINT
+* DNS telemetry
+* Behavioral analytics
+* Automated enrichment
+
+into a scalable and extensible ecosystem.
 
 ---
 
 ## 🔗 References
 
-Public material referenced for context:
-
-- INFERMAL Study (ICANN & KORLabs) —  
-  https://www.icann.org/resources/pages/inferential-analysis-maliciously-registered-domains-infermal-2024-12-03-en
-
-Additional public documentation from ICANN, KORLabs, and related DNS research is cited solely as contextual background.
+* INFERMAL Study (ICANN & KORLabs)
+  [https://www.icann.org/resources/pages/inferential-analysis-maliciously-registered-domains-infermal-2024-12-03-en](https://www.icann.org/resources/pages/inferential-analysis-maliciously-registered-domains-infermal-2024-12-03-en)
 
 ---
 
 ## ✍️ Author
 
-**Mr. Biswadeb Mukherjee**  
+**Biswadeb Mukherjee**
 Offensive Security Specialist | Malware Developer | Software Engineer
