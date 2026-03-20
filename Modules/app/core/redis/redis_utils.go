@@ -68,6 +68,7 @@ type RedisClient struct {
 	logger   Logger
 	prefix   string
 	stopChan chan struct{}
+	closed   bool
 	wg       sync.WaitGroup
 }
 
@@ -144,6 +145,8 @@ func (r *RedisClient) waitForReady(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-r.stopSignal():
+			return context.Canceled
 		default:
 		}
 
@@ -153,7 +156,9 @@ func (r *RedisClient) waitForReady(ctx context.Context) error {
 		}
 
 		r.logger.Errorf("Redis ping failed: %v. Retrying in %s", err, backoff)
-		time.Sleep(backoff)
+		if err := r.waitForBackoff(ctx, backoff); err != nil {
+			return err
+		}
 
 		if backoff < maxBackoff {
 			backoff *= 2
@@ -164,6 +169,25 @@ func (r *RedisClient) waitForReady(ctx context.Context) error {
 	}
 }
 
+func (r *RedisClient) stopSignal() <-chan struct{} {
+	r.mu.RLock()
+	ch := r.stopChan
+	r.mu.RUnlock()
+	return ch
+}
+func (r *RedisClient) waitForBackoff(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.stopSignal():
+		return context.Canceled
+	case <-timer.C:
+		return nil
+	}
+}
 func (r *RedisClient) startHealthChecker() {
 	r.wg.Add(1)
 
@@ -213,12 +237,12 @@ func (r *RedisClient) key(k string) string {
 
 func (r *RedisClient) Close() error {
 	r.mu.Lock()
-	if r.stopChan == nil {
+	if r.closed {
 		r.mu.Unlock()
 		return nil
 	}
+	r.closed = true
 	close(r.stopChan)
-	r.stopChan = nil
 	r.mu.Unlock()
 
 	r.wg.Wait()

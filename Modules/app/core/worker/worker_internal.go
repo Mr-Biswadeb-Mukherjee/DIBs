@@ -113,12 +113,20 @@ func (wp *WorkerPool) scaleEval() {
 
 	// scale up if backlog per worker exceeds threshold
 	if back > wp.options.ScaleUpThreshold {
+		scaled := false
 		wp.mu.Lock()
 		if len(wp.workers) < wp.options.MaxWorkers {
-			wp.addWorker()
-			wp.log(fmt.Sprintf("Autoscale: up to %d", len(wp.workers)))
+			scaled = true
 		}
 		wp.mu.Unlock()
+
+		if scaled {
+			wp.addWorker()
+			wp.mu.Lock()
+			count := len(wp.workers)
+			wp.mu.Unlock()
+			wp.log(fmt.Sprintf("Autoscale: up to %d", count))
+		}
 		wp.lastLowLoadAt = time.Time{}
 		return
 	}

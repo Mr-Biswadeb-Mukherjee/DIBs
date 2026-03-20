@@ -171,3 +171,45 @@ func TestScaleEval_EqualThreshold_NoScale(t *testing.T) {
 	// No scale up/down expected at equality
 	require.Equal(t, 1, len(wp.workers))
 }
+
+func slowScaleTask(ctx context.Context) (interface{}, []string, []string, []error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil, nil, []error{ctx.Err()}
+	case <-time.After(300 * time.Millisecond):
+		return "ok", nil, nil, nil
+	}
+}
+
+func TestScaleEval_ScaleUpDoesNotDeadlock(t *testing.T) {
+	opts := &RunOptions{
+		Timeout:          time.Second,
+		AutoScale:        true,
+		MinWorkers:       1,
+		MaxWorkers:       2,
+		ScaleUpThreshold: 0.1,
+	}
+
+	wp := NewWorkerPool(opts, 1, nil)
+	defer wp.Stop()
+
+	for i := 0; i < 6; i++ {
+		_, _, err := wp.SubmitTask(slowScaleTask, Medium, 1)
+		require.NoError(t, err)
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		wp.scaleEval()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("scaleEval deadlocked during scale up")
+	}
+
+	require.Equal(t, 2, len(wp.workers))
+}

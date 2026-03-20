@@ -103,6 +103,33 @@ func TestWaitForReady_ContextTimeout(t *testing.T) {
 	require.GreaterOrEqual(t, mock.call, 1)
 }
 
+func TestWaitForReady_StopsOnCloseSignal(t *testing.T) {
+	mock := newMockClient()
+	mock.pingErrs = []error{errors.New("x"), errors.New("y")}
+
+	r := &RedisClient{
+		client:   mock,
+		cfg:      &RedisConfig{BackoffMax: 1},
+		logger:   silentLogger{},
+		stopChan: make(chan struct{}),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.waitForReady(context.Background())
+	}()
+
+	time.Sleep(40 * time.Millisecond)
+	close(r.stopChan)
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("waitForReady did not stop after close signal")
+	}
+}
+
 //
 // ===================================================================
 //            Tests for health checker (real timing)
