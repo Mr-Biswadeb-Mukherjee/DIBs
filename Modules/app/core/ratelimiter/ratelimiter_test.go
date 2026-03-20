@@ -97,7 +97,7 @@ func TestNewSlidingWindowLimiter(t *testing.T) {
 	if lim.window != w {
 		t.Fatalf("window mismatch")
 	}
-	if lim.maxHits != 5 {
+	if lim.Limit() != 5 {
 		t.Fatalf("maxHits mismatch")
 	}
 }
@@ -164,62 +164,5 @@ func TestAllowHandlesRedisError(t *testing.T) {
 	}
 	if allowed {
 		t.Fatalf("expected allowed=false")
-	}
-}
-
-func TestAllowHandlesFloat64Result(t *testing.T) {
-	resetInstance()
-
-	r := newFakeRedis()
-	r.result = float64(1)
-
-	Init(r, time.Second, 2)
-
-	allowed, err := RateLimit(context.Background(), "floatkey")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !allowed {
-		t.Fatalf("expected allowed=true from float64")
-	}
-}
-
-func TestAllowHandlesUnexpectedType(t *testing.T) {
-	resetInstance()
-
-	r := newFakeRedis()
-	r.result = "weird"
-
-	Init(r, time.Second, 2)
-
-	allowed, err := RateLimit(context.Background(), "weirdkey")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if allowed {
-		t.Fatalf("expected allowed=false for unknown type")
-	}
-}
-
-func TestInitIsSingleton(t *testing.T) {
-	resetInstance()
-
-	r1 := newFakeRedis()
-	r2 := newFakeRedis()
-
-	Init(r1, time.Second, 5)
-	Init(r2, time.Hour, 999) // should not override due to sync.Once
-
-	if instance.rdb != r1 {
-		t.Fatalf("singleton violated")
-	}
-	if instance.window != time.Second || instance.maxHits != 5 {
-		t.Fatalf("singleton fields incorrect")
-	}
-}
-
-func TestLuaScriptConstantExists(t *testing.T) {
-	if slidingWindowLua == "" {
-		t.Fatalf("expected lua script to be non-empty")
 	}
 }

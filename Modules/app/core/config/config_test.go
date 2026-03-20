@@ -94,6 +94,39 @@ dns_timeout_ms=999
 	}
 }
 
+func TestLoadOrCreateConfig_ParseAutoValues(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "settings.conf")
+
+	content := `
+rate_limit=auto
+cooldown_after=auto
+cooldown_duration=auto
+timeout_seconds=auto
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	cfg, err := config.LoadOrCreateConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.RateLimit != 0 {
+		t.Fatalf("expected auto ratelimit=0 got %d", cfg.RateLimit)
+	}
+	if cfg.CooldownAfter != 0 {
+		t.Fatalf("expected auto cooldown_after=0 got %d", cfg.CooldownAfter)
+	}
+	if cfg.CooldownDuration != 0 {
+		t.Fatalf("expected auto cooldown_duration=0 got %d", cfg.CooldownDuration)
+	}
+	if cfg.TimeoutSeconds != 0 {
+		t.Fatalf("expected auto timeout_seconds=0 got %d", cfg.TimeoutSeconds)
+	}
+}
+
 // ----------------------------------------------
 // Test: Invalid entries ignored
 // ----------------------------------------------

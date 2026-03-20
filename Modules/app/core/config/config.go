@@ -25,10 +25,10 @@ type Config struct {
 
 var defaultConfig = Config{
 	// Worker / Performance defaults
-	RateLimit:        40,
-	CooldownAfter:    2500,
-	CooldownDuration: 20,
-	TimeoutSeconds:   5,
+	RateLimit:        0, // auto
+	CooldownAfter:    0, // auto
+	CooldownDuration: 0, // auto
+	TimeoutSeconds:   0, // auto
 	MaxRetries:       3,
 	AutoScale:        false,
 
@@ -64,10 +64,10 @@ func writeDefault(path string) error {
 
 	_, err = f.WriteString(fmt.Sprintf(
 		"# Worker / Performance\n"+
-			"rate_limit=%d\n"+
-			"cooldown_after=%d\n"+
-			"cooldown_duration=%d\n"+
-			"timeout_seconds=%d\n"+
+			"rate_limit=%s\n"+
+			"cooldown_after=%s\n"+
+			"cooldown_duration=%s\n"+
+			"timeout_seconds=%s\n"+
 			"max_retries=%d\n"+
 			"autoscale=%t\n\n"+
 			"# DNS settings\n"+
@@ -75,10 +75,10 @@ func writeDefault(path string) error {
 			"backup_dns=%s\n"+
 			"dns_retries=%d\n"+
 			"dns_timeout_ms=%d\n",
-		defaultConfig.RateLimit,
-		defaultConfig.CooldownAfter,
-		defaultConfig.CooldownDuration,
-		defaultConfig.TimeoutSeconds,
+		formatAutoInt(defaultConfig.RateLimit),
+		formatAutoInt(defaultConfig.CooldownAfter),
+		formatAutoInt(defaultConfig.CooldownDuration),
+		formatAutoInt(defaultConfig.TimeoutSeconds),
 		defaultConfig.MaxRetries,
 		defaultConfig.AutoScale,
 		defaultConfig.UpstreamDNS,
@@ -117,13 +117,13 @@ func parseConfig(path string) (Config, error) {
 
 		// Worker / Performance
 		case "rate_limit":
-			cfg.RateLimit, _ = strconv.Atoi(value)
+			cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit)
 		case "cooldown_after":
-			cfg.CooldownAfter, _ = strconv.Atoi(value)
+			cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter)
 		case "cooldown_duration":
-			cfg.CooldownDuration, _ = strconv.Atoi(value)
+			cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration)
 		case "timeout_seconds":
-			cfg.TimeoutSeconds, _ = strconv.Atoi(value)
+			cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds)
 		case "max_retries":
 			cfg.MaxRetries, _ = strconv.Atoi(value)
 		case "autoscale":
@@ -143,4 +143,22 @@ func parseConfig(path string) (Config, error) {
 	}
 
 	return cfg, scanner.Err()
+}
+
+func formatAutoInt(v int) string {
+	if v <= 0 {
+		return "auto"
+	}
+	return strconv.Itoa(v)
+}
+
+func parseIntOrAuto(value string, fallback int) int {
+	if strings.EqualFold(strings.TrimSpace(value), "auto") {
+		return 0
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

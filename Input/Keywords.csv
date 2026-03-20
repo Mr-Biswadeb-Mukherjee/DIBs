@@ -65,7 +65,7 @@ Amazon Fashion
 Flipkart Supermart
 BB Now
 Nature's Basket
-Spencer’s Online
+Spencer's Online
 Reliance Fresh Online
 Tata CLiQ Luxury
 Tata Digital Retail
@@ -161,20 +161,14 @@ Killer
 Spykar
 Being Human
 Pantaloons
-Westside
-Lifestyle
 Fastrack
 Titan
 Tanishq
 Voylla
-Zivame
 Amante
 Triumph
 Jockey
 Enamor
-Nykaa Fashion
-Ajio
-Myntra
 Zudio
 Hidesign
 Lavie
@@ -184,7 +178,6 @@ Samsonite
 American Tourister
 Wildcraft
 The Souled Store
-Bewakoof
 H&M Home
 Zara Home
 FabAlley
@@ -197,8 +190,7 @@ Manish Malhotra
 Masaba
 House of Blouse
 Jaypore
-Chumbak
-Neeman’s
+Neeman's
 Soxytoes
 Pothys
 Kalaniketan
@@ -207,13 +199,10 @@ Okhai
 Ray-Ban
 Oakley
 Vogue Eyewear
-Lenskart
 Lakmé
 Forest Essentials
-Mamaearth
 Plum
 Sugar Cosmetics
-MyGlamm
 Dot & Key
 Minimalist
 Pilgrim
@@ -229,11 +218,11 @@ Khadi Natural
 Good Vibes
 SkinKraft
 Just Herbs
-Re’equil
+Re'equil
 Blue Heaven
 Faces Canada
 Renee Cosmetics
-L’Oréal Paris
+L'Oréal Paris
 Maybelline
 Garnier
 NYX
@@ -261,7 +250,7 @@ La Roche-Posay
 Vichy
 Avene
 The Ordinary
-Paula’s Choice
+Paula's Choice
 Innisfree
 Etude
 Laneige
@@ -269,12 +258,12 @@ Cosrx
 Klairs
 The Face Shop
 Olay
-Pond’s
+Pond's
 Dove
 Tresemmé
 Pantene
 Head & Shoulders
-L’Oréal Professionnel
+L'Oréal Professionnel
 Wella Professionals
 Schwarzkopf Professional
 Kerastase
@@ -290,7 +279,6 @@ Dior Beauty
 Chanel Beauty
 Gucci Beauty
 Versace
-Calvin Klein
 Davidoff
 Giorgio Armani Beauty
 Yves Saint Laurent Beauty
@@ -379,7 +367,6 @@ Daikin
 Blue Star
 Voltas
 Lloyd
-
 Godrej
 Videocon
 Onida
@@ -402,170 +389,212 @@ Bajaj Electricals
 Vu Televisions
 MarQ
 Tata Power Solar
-Reliance Jio (Devices)
 Sharp
 Midea
 TCL Communication
 Daewoo
 Thomson
-- Apple
-- Samsung
-- Xiaomi
-- Redmi
-- Poco
-- Realme
-- Oppo
-- Vivo
-- OnePlus
-- iQOO
-- Motorola
-- Nokia
-- Google Pixel
-- Lava
-- Micromax
-- Infinix
-- Tecno
-- Asus
-- Sony Mobile
-- BlackBerry
-- Honor
-- Huawei
-- HTC
-- Gionee
-- ZTE
-- Meizu
-- BLU
-- Lenovo
-- Coolpad
-- LYF
-- Dell
-- HP
-- Lenovo (PC)
-- Acer
-- MSI
-- LG
-- Avita
-- Fujitsu
-- Panasonic
-- Gigabyte
-- Razer
-- Primebook
-- JioBook
-- Apple Watch
-- Fitbit
-- Noise
-- boAt
-- Fire-Boltt
-- Amazfit
-- Fastrack
-- Titan Smart
-- Garmin
-- Suunto
-- Casio
-- Zebronics
-- Portronics
-- CrossBeats
-- TAGG
-- JBL
-- Sony
-- Sennheiser
-- Skullcandy
-- Bose
-- Marshall
-- Philips
-- Oppo Enco
-- OnePlus Buds
-- pTron
-- Blaupunkt
-- Boult Audio
-- 1More
-- Audio-Technica
-- Beyerdynamic
-- HyperX
-- Logitech
-- Harman Kardon
-- TCL
-- Vu
-- Hisense
-- Toshiba
-- Kodak
-- Thomson
-- Haier
-- Sansui
-- BPL
-- Skyworth
-- Sharp
-- Whirlpool
-- Godrej
-- IFB
-- Bosch
-- Siemens
-- Voltas
-- Blue Star
-- Crompton
-- Havells
-- Bajaj
-- Usha
-- Orient Electric
-- V-Guard
-- Daikin
-- Carrier
-- Hitachi
-- Electrolux
-- Midea
-- Videocon
-- Kelvinator
-- Google Nest
-- Amazon Echo
-- TP-Link
-- D-Link
-- Syska
-- Wipro
-- Philips Hue
-- Qubo
-- Honeywell
-- Schneider
-- Livpure
-- Dyson
-- Netgear
-- Tenda
-- Linksys
-- Mercusys
-- Nvidia
-- AMD
-- Intel
-- Corsair
-- Cooler Master
-- ASUS ROG
-- Zotac
-- Inno3D
-- Redgear
-- Redragon
-- Ant Esports
-- Thermaltake
-- Seagate
-- Western Digital
-- SanDisk
-- Kingston
-- Crucial
-- Adata
-- Transcend
-- Lexar
-- Stuffcool
-- Ambrane
-- Anker
-- Belkin
-- Spigen
-- Ringke
-- DailyObjects
-- Astrum
-- iBall
-- Inbase
-- Molife
-- Zagg
-- Case-Mate
-- Karbonn
-- Intex
-- Dixon Technologies
-- Astrum
-
+Google Pixel
+Sony Mobile
+BlackBerry
+Honor
+Huawei
+HTC
+Gionee
+ZTE
+Meizu
+BLU
+Coolpad
+LYF
+Avita
+Fujitsu
+Gigabyte
+Primebook
+JioBook
+Apple Watch
+Fitbit
+Amazfit
+Titan Smart
+Garmin
+Suunto
+Casio
+CrossBeats
+TAGG
+Oppo Enco
+OnePlus Buds
+pTron
+Blaupunkt
+Boult Audio
+1More
+Audio-Technica
+Beyerdynamic
+Crompton
+Usha
+Orient Electric
+V-Guard
+Electrolux
+Kelvinator
+Google Nest
+Amazon Echo
+Wipro
+Philips Hue
+Qubo
+Honeywell
+Schneider
+Livpure
+Tenda
+Linksys
+Mercusys
+Cooler Master
+ASUS ROG
+Zotac
+Inno3D
+Redgear
+Redragon
+Ant Esports
+Thermaltake
+Crucial
+Adata
+Lexar
+Stuffcool
+Ambrane
+Spigen
+Ringke
+DailyObjects
+Astrum
+Inbase
+Molife
+Zagg
+Case-Mate
+Dixon Technologies
+HDFC Bank
+ICICI Bank
+SBI
+Axis Bank
+Kotak Mahindra
+Yes Bank
+IndusInd Bank
+Punjab National Bank
+Bank of Baroda
+Canara Bank
+IDFC First Bank
+Federal Bank
+RBL Bank
+AU Small Finance
+Paytm
+PhonePe
+Google Pay
+CRED
+BharatPe
+Razorpay
+Cashfree
+Instamojo
+Zerodha
+Groww
+Upstox
+Angel One
+Motilal Oswal
+HDFC Securities
+ICICI Direct
+Sharekhan
+5paisa
+INDmoney
+Scripbox
+ET Money
+Kuvera
+Fisdom
+PolicyBazaar
+Acko
+Digit Insurance
+HDFC Life
+LIC
+Max Life
+Bajaj Allianz
+Tata AIA
+Star Health
+Navi
+MoneyTap
+EarlySalary
+KreditBee
+LazyPay
+Slice
+Uni Cards
+OneCard
+SBM Bank
+Jupiter
+Fi Money
+Niyo
+Freo
+Stashfin
+Lendingkart
+Capital Float
+NeoGrowth
+Aye Finance
+Faircent
+i2iFunding
+LenDenClub
+Apollo Hospitals
+Fortis Healthcare
+Max Healthcare
+Manipal Hospitals
+Narayana Health
+Aster DM Healthcare
+Medanta
+Columbia Asia
+AIIMS
+Cipla
+Sun Pharma
+Dr Reddy's
+Lupin
+Torrent Pharma
+Cadila
+Alkem
+Mankind Pharma
+Dabur
+Emami
+Patanjali
+Zydus
+Abbott India
+Pfizer India
+Novartis India
+GSK India
+Sanofi India
+Himalaya Drug
+Medlife
+Tata 1mg
+Netmeds
+Apollo Pharmacy
+MediBuddy
+Practo
+Tata Health
+HealthifyMe
+Cult Fit
+GoQii
+Wellversed
+mfine
+DocPrime
+Lybrate
+Portea Medical
+Nightingales
+Thyrocare
+SRL Diagnostics
+Metropolis
+Dr Lal PathLabs
+BYJU'S
+Unacademy
+Vedantu
+Physics Wallah
+Toppr
+Meritnation
+Doubtnut
+Extramarks
+Embibe
+Simplilearn
+UpGrad
+Great Learning
+Coursera India
+edX
+Udemy
+Shaw Academy
+Internshala
+Naukri Learning

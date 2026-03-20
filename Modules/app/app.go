@@ -22,7 +22,10 @@ import (
 )
 
 func Run(parentCtx context.Context) error {
-	_ = parentCtx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
 	appLog := logger.NewLogger("app")
 	dnsLog := logger.NewLogger("dns")
 	rateLimiterLog := logger.NewLogger("ratelimiter")
@@ -64,13 +67,6 @@ func Run(parentCtx context.Context) error {
 	rdb := redis.Client()
 	defer redis.Close()
 
-	// Rate limiter
-	limit := cfg.RateLimit
-	if limit <= 0 {
-		limit = 999999999
-	}
-	ratelimiter.Init(rdb, time.Second, int64(limit), rateLimiterLog)
-
 	// Recon init
 	re := recon.New(
 		cfg.UpstreamDNS,
@@ -95,6 +91,10 @@ func Run(parentCtx context.Context) error {
 		return nil
 	}
 
+	workers := runtime.NumCPU() * 4
+	initialRate := seedRateLimit(cfg.RateLimit, total, workers)
+	tuner := newRuntimeTuner(cfg, total, workers)
+
 	// CSV writer
 	fw, err := filewriter.SafeNewCSVWriter("Input/Domains.csv", filewriter.Overwrite)
 	if err != nil {
@@ -103,25 +103,50 @@ func Run(parentCtx context.Context) error {
 		return fmt.Errorf("error opening csv writer: %w", err)
 	}
 
-	// Worker pool
+	// Rate limiter
+	ratelimiter.Init(rdb, time.Second, initialRate, rateLimiterLog)
+
+	workerTimeout := tuner.resolveTimeout() * 4
+	if workerTimeout < 12*time.Second {
+		workerTimeout = 12 * time.Second
+	}
+
+	var activeWorkers int64
 	opts := &wpkg.RunOptions{
-		Timeout:         time.Duration(cfg.TimeoutSeconds) * time.Second,
+		Timeout:         workerTimeout,
 		MaxRetries:      cfg.MaxRetries,
 		AutoScale:       cfg.AutoScale,
 		MinWorkers:      1,
 		NonBlockingLogs: true,
+		OnTaskStart: func(taskID int64) {
+			_ = taskID
+			atomic.AddInt64(&activeWorkers, 1)
+		},
+		OnTaskFinish: func(taskID int64, res wpkg.WorkerResult) {
+			_ = taskID
+			_ = res
+			atomic.AddInt64(&activeWorkers, -1)
+		},
 	}
 
-	wp := wpkg.NewWorkerPool(opts, runtime.NumCPU()*4, rdb)
+	wp := wpkg.NewWorkerPool(opts, workers, rdb)
 
 	close(animStop)
 	time.Sleep(150 * time.Millisecond)
 
+	var submitted int64
 	var completed int64
 	var resolved int64
 
 	cdm := cooldown.NewManager()
 	cdm.StartWatcher()
+	controlCtx, controlCancel := context.WithCancel(parentCtx)
+	defer controlCancel()
+	go tuner.run(controlCtx, cdm, runtimeCounters{
+		submitted: &submitted,
+		completed: &completed,
+		active:    &activeWorkers,
+	}, appLog)
 
 	pb := progressBar.NewProgressBar(int(total), "Resolving domains", "green")
 	pb.StartAutoRender(func() (int64, int64, bool, int64) {
@@ -137,64 +162,7 @@ func Run(parentCtx context.Context) error {
 	for _, domain := range allGenerated {
 		d := domain
 
-		taskFunc := func(ctx context.Context) (interface{}, []string, []string, []error) {
-
-			// Redis cache
-			cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-			cached, err := rdb.GetValue(cacheCtx, "dns:"+d)
-			cancel()
-
-			if err == nil {
-				if cached == "1" {
-					return d, nil, nil, nil
-				}
-				if cached == "0" {
-					return nil, nil, nil, nil
-				}
-			}
-
-			// Cooldown
-			if cdm.Active() {
-				select {
-				case <-ctx.Done():
-					return nil, nil, nil, []error{ctx.Err()}
-				case <-cdm.Gate():
-				}
-			}
-
-			// Rate limit
-			for {
-				select {
-				case <-ctx.Done():
-					return nil, nil, nil, []error{ctx.Err()}
-				default:
-				}
-				allowed, err := ratelimiter.RateLimit(ctx, "dns-rate")
-				if err != nil {
-					logModuleError("ratelimiter", d, err)
-					break
-				}
-				if allowed {
-					break
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-
-			ok, resolveErr := re.Resolve(ctx, d)
-			logModuleError("dns", d, resolveErr)
-
-			if ok {
-				if err := rdb.SetValue(context.Background(), "dns:"+d, "1", successTTL); err != nil {
-					logModuleError("redis-cache-write", d, err)
-				}
-				return d, nil, nil, nil
-			}
-
-			if err := rdb.SetValue(context.Background(), "dns:"+d, "0", failTTL); err != nil {
-				logModuleError("redis-cache-write", d, err)
-			}
-			return nil, nil, nil, nil
-		}
+		taskFunc := makeDomainTask(d, re, rdb, cdm, tuner, successTTL, failTTL, logModuleError)
 
 		_, resCh, err := wp.SubmitTask(taskFunc, wpkg.Medium, 0)
 		if err != nil {
@@ -203,6 +171,7 @@ func Run(parentCtx context.Context) error {
 			pb.Add(1)
 			continue
 		}
+		atomic.AddInt64(&submitted, 1)
 
 		wg.Add(1)
 		go func(rc <-chan wpkg.WorkerResult) {
@@ -223,12 +192,8 @@ func Run(parentCtx context.Context) error {
 				logModuleError("worker-task", "result", taskErr)
 			}
 
-			newCount := atomic.AddInt64(&completed, 1)
+			atomic.AddInt64(&completed, 1)
 			pb.Add(1)
-
-			if cfg.CooldownAfter > 0 && newCount%int64(cfg.CooldownAfter) == 0 {
-				cdm.Trigger(int64(cfg.CooldownDuration))
-			}
 
 		}(resCh)
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,7 +29,7 @@ type ModuleLogger interface {
 type SlidingWindowLimiter struct {
 	rdb     RedisStore
 	window  time.Duration
-	maxHits int64
+	maxHits atomic.Int64
 	logger  ModuleLogger
 }
 
@@ -38,12 +39,13 @@ func newSlidingWindowLimiter(
 	maxHits int64,
 	logger ModuleLogger,
 ) *SlidingWindowLimiter {
-	return &SlidingWindowLimiter{
-		rdb:     rdb,
-		window:  window,
-		maxHits: maxHits,
-		logger:  logger,
+	limiter := &SlidingWindowLimiter{
+		rdb:    rdb,
+		window: window,
+		logger: logger,
 	}
+	limiter.SetLimit(maxHits)
+	return limiter
 }
 
 // ==============================================
@@ -84,6 +86,23 @@ func RateLimit(ctx context.Context, key string) (bool, error) {
 	return instance.Allow(ctx, key)
 }
 
+// SetMaxHits updates the max hits per window at runtime.
+func SetMaxHits(maxHits int64) error {
+	if instance == nil {
+		return ErrNotInitialized
+	}
+	instance.SetLimit(maxHits)
+	return nil
+}
+
+// CurrentLimit returns the active max hits per window.
+func CurrentLimit() (int64, error) {
+	if instance == nil {
+		return 0, ErrNotInitialized
+	}
+	return instance.Limit(), nil
+}
+
 // Error returned when limiter is used before Init().
 var ErrNotInitialized = fmt.Errorf("ratelimiter used before Init()")
 
@@ -115,12 +134,13 @@ return 1
 func (l *SlidingWindowLimiter) Allow(ctx context.Context, key string) (bool, error) {
 
 	now := time.Now().UnixMilli()
+	maxHits := l.Limit()
 
 	res, err := l.rdb.Eval(
 		ctx,
 		slidingWindowLua,
 		[]string{key},
-		l.maxHits,
+		maxHits,
 		l.window.Milliseconds(),
 		now,
 	)
@@ -153,4 +173,25 @@ func (l *SlidingWindowLimiter) warnf(format string, v ...interface{}) {
 		return
 	}
 	l.logger.Warning(format, v...)
+}
+
+func (l *SlidingWindowLimiter) SetLimit(maxHits int64) {
+	if l == nil {
+		return
+	}
+	if maxHits <= 0 {
+		maxHits = 1
+	}
+	l.maxHits.Store(maxHits)
+}
+
+func (l *SlidingWindowLimiter) Limit() int64 {
+	if l == nil {
+		return 1
+	}
+	maxHits := l.maxHits.Load()
+	if maxHits <= 0 {
+		return 1
+	}
+	return maxHits
 }
