@@ -29,6 +29,7 @@ type ProgressBar struct {
 	bar       *progressbar.ProgressBar
 	lock      sync.Mutex
 	colorCode string
+	label     string
 
 	// Stats for RPS + ETA
 	lastCount int64
@@ -79,6 +80,7 @@ func NewProgressBar(total int, description string, color string) *ProgressBar {
 	return &ProgressBar{
 		bar:        bar,
 		colorCode:  colorCode,
+		label:      description,
 		lastTime:   time.Now(),
 		stopRender: make(chan struct{}),
 	}
@@ -91,6 +93,15 @@ func NewProgressBar(total int, description string, color string) *ProgressBar {
 func (p *ProgressBar) Update(current, total int64, cooldown bool, cooldownRemaining int64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	targetTotal := total
+	if targetTotal < 1 {
+		targetTotal = 1
+	}
+	if current > targetTotal {
+		targetTotal = current
+	}
+	p.bar.ChangeMax64(targetTotal)
 
 	now := time.Now()
 	elapsed := now.Sub(p.lastTime).Seconds()
@@ -109,9 +120,14 @@ func (p *ProgressBar) Update(current, total int64, cooldown bool, cooldownRemain
 	}
 
 	// cooldown display
+	label := p.label
+	if label == "" {
+		label = "Progress"
+	}
 	desc := fmt.Sprintf(
-		"%sResolving domains%s | %.2f req/s | ETA %s",
+		"%s%s%s | %.2f req/s | ETA %s",
 		p.colorForCooldown(cooldown),
+		label,
 		ColorReset,
 		rps,
 		etaStr,
@@ -119,8 +135,9 @@ func (p *ProgressBar) Update(current, total int64, cooldown bool, cooldownRemain
 
 	if cooldown {
 		desc = fmt.Sprintf(
-			"%sResolving domains (Cooldown %ds)%s | %.2f req/s | ETA %s",
+			"%s%s (Cooldown %ds)%s | %.2f req/s | ETA %s",
 			ColorYellow,
+			label,
 			cooldownRemaining,
 			ColorReset,
 			rps,

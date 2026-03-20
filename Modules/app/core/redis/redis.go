@@ -110,6 +110,35 @@ func (r *RedisClient) Eval(ctx context.Context, script string, keys []string, ar
 	return r.client.Eval(ctx, script, realKeys, args...).Result()
 }
 
+func (r *RedisClient) RPush(ctx context.Context, key string, values ...string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	args := make([]interface{}, len(values))
+	for i, v := range values {
+		args[i] = v
+	}
+	return r.client.RPush(ctx, r.key(key), args...).Err()
+}
+
+func (r *RedisClient) BLPop(ctx context.Context, timeout time.Duration, key string) (string, bool, error) {
+	out, err := r.client.BLPop(ctx, timeout, r.key(key)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if len(out) < 2 {
+		return "", false, nil
+	}
+	return out[1], true, nil
+}
+
+func (r *RedisClient) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return r.client.Expire(ctx, r.key(key), ttl).Err()
+}
+
 //
 // ==========================
 //        GLOBAL CLIENT

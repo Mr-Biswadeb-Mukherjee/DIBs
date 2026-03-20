@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	defaultBatchSize  = 600
+	defaultFlushEvery = 2 * time.Second
+)
+
 // ----------
 // PUBLIC API
 // ----------
@@ -32,27 +37,44 @@ type CSVOptions struct {
 	LogHooks   LogHooks
 }
 
+type NDJSONOptions struct {
+	BatchSize  int
+	FlushEvery time.Duration
+	LogHooks   LogHooks
+}
+
+func DefaultCSVOptions(mode Mode, atomic bool) CSVOptions {
+	return CSVOptions{
+		Mode:       mode,
+		Atomic:     atomic,
+		BatchSize:  defaultBatchSize,
+		FlushEvery: defaultFlushEvery,
+		LogHooks:   LogHooks{},
+	}
+}
+
+func DefaultNDJSONOptions() NDJSONOptions {
+	return NDJSONOptions{
+		BatchSize:  defaultBatchSize,
+		FlushEvery: defaultFlushEvery,
+		LogHooks:   LogHooks{},
+	}
+}
+
 // The two “future-proof” constructors used by external code.
 // Their signatures never change.
 
 func SafeNewCSVWriter(filename string, mode Mode) (*CSVWriter, error) {
-	opts := CSVOptions{
-		Mode:       mode,
-		Atomic:     false,
-		BatchSize:  600,
-		FlushEvery: 2 * time.Second,
-		LogHooks:   LogHooks{},
-	}
+	opts := DefaultCSVOptions(mode, false)
 	return NewWriter(filename, opts)
 }
 
 func SafeNewAtomicCSVWriter(filename string) (*CSVWriter, error) {
-	opts := CSVOptions{
-		Mode:       Overwrite,
-		Atomic:     true,
-		BatchSize:  600,
-		FlushEvery: 2 * time.Second,
-		LogHooks:   LogHooks{},
-	}
+	opts := DefaultCSVOptions(Overwrite, true)
 	return NewWriter(filename, opts)
+}
+
+func SafeNewNDJSONWriter(filename string) (*NDJSONWriter, error) {
+	opts := DefaultNDJSONOptions()
+	return NewNDJSONWriter(filename, opts)
 }

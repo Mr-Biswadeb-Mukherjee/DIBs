@@ -12,9 +12,7 @@ import (
 
 	config "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/config"
 	cooldown "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/cooldown"
-	filewriter "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/filewriter"
 	logger "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/logger"
-	progressBar "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/progressBar"
 	ratelimiter "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/ratelimiter"
 	redis "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/redis"
 	ui "github.com/official-biswadeb941/Infermal_v2/Modules/app/core/ui"
@@ -95,14 +93,6 @@ func Run(parentCtx context.Context) error {
 	initialRate := seedRateLimit(cfg.RateLimit, total, workers)
 	tuner := newRuntimeTuner(cfg, total, workers)
 
-	// CSV writer
-	fw, err := filewriter.SafeNewCSVWriter("Input/Domains.csv", filewriter.Overwrite)
-	if err != nil {
-		close(animStop)
-		appLog.Alert("csv writer init failed: %v", err)
-		return fmt.Errorf("error opening csv writer: %w", err)
-	}
-
 	// Rate limiter
 	ratelimiter.Init(rdb, time.Second, initialRate, rateLimiterLog)
 
@@ -137,6 +127,7 @@ func Run(parentCtx context.Context) error {
 	var submitted int64
 	var completed int64
 	var resolved int64
+	var intelDone int64
 
 	cdm := cooldown.NewManager()
 	cdm.StartWatcher()
@@ -148,11 +139,22 @@ func Run(parentCtx context.Context) error {
 		active:    &activeWorkers,
 	}, appLog)
 
-	pb := progressBar.NewProgressBar(int(total), "Resolving domains", "green")
-	pb.StartAutoRender(func() (int64, int64, bool, int64) {
-		cur := atomic.LoadInt64(&completed)
-		return cur, total, cdm.Active(), cdm.Remaining()
+	liveProgress := newLiveProgress([]*progressRow{
+		generatedDomainsRow(total, &resolved),
+		resolveProgressRow(total, &completed, cdm),
+		intelProgressRow(total, &intelDone),
 	})
+
+	intelPipe, err := newIntelPipeline(parentCtx, rdb, cfg.DNSTimeoutMS, logModuleError, func() {
+		atomic.AddInt64(&intelDone, 1)
+	})
+	if err != nil {
+		close(animStop)
+		appLog.Alert("intel pipeline init failed: %v", err)
+		return fmt.Errorf("error starting dns intel pipeline: %w", err)
+	}
+
+	liveProgress.Start()
 
 	var wg sync.WaitGroup
 	successTTL := 48 * time.Hour
@@ -168,7 +170,7 @@ func Run(parentCtx context.Context) error {
 		if err != nil {
 			logModuleError("worker-submit", d, err)
 			atomic.AddInt64(&completed, 1)
-			pb.Add(1)
+			atomic.AddInt64(&intelDone, 1)
 			continue
 		}
 		atomic.AddInt64(&submitted, 1)
@@ -180,33 +182,38 @@ func Run(parentCtx context.Context) error {
 			res, ok := <-rc
 			if !ok {
 				atomic.AddInt64(&completed, 1)
-				pb.Add(1)
+				atomic.AddInt64(&intelDone, 1)
 				return
 			}
 
 			if s, ok := res.Result.(string); ok && s != "" {
-				fw.WriteRow([]string{s})
 				atomic.AddInt64(&resolved, 1)
+				if !intelPipe.EnqueueResolved(s) {
+					atomic.AddInt64(&intelDone, 1)
+				}
+			} else {
+				atomic.AddInt64(&intelDone, 1)
 			}
 			for _, taskErr := range res.Errors {
 				logModuleError("worker-task", "result", taskErr)
 			}
 
 			atomic.AddInt64(&completed, 1)
-			pb.Add(1)
 
 		}(resCh)
 	}
 
 	wg.Wait()
 	wp.Stop()
-	fw.Close()
+	if err := intelPipe.StopAndWait(); err != nil {
+		logModuleError("dns-intel-pipeline", "shutdown", err)
+	}
 
-	pb.StopAutoRender()
-	pb.Finish()
+	liveProgress.Stop()
+	liveProgress.Finish()
 
 	ui.EndBanner(startTime, total, resolved)
-	fmt.Println("✔ Valid domains written to Input/Domains.csv")
+	fmt.Println("✔ DNS intel written to Output/DNS_Intel.ndjson")
 	appLog.Info("run completed generated=%d resolved=%d", total, resolved)
 
 	return nil
