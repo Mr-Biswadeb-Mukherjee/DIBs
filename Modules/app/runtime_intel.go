@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"time"
 
@@ -27,9 +26,11 @@ type intelQueueStore interface {
 }
 
 type intelPipeline struct {
-	store   intelQueueStore
-	service *intel.DNSIntelService
-	writer  *filewriter.NDJSONWriter
+	store        intelQueueStore
+	service      *intel.DNSIntelService
+	writer       *filewriter.NDJSONWriter
+	domainWriter *filewriter.NDJSONWriter
+	generated    map[string]generatedDomainMeta
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -42,31 +43,47 @@ func newIntelPipeline(
 	parentCtx context.Context,
 	store intelQueueStore,
 	dnsTimeoutMS int64,
+	generated map[string]generatedDomainMeta,
 	logErr moduleErrorLogger,
 	onDone func(),
 ) (*intelPipeline, error) {
-	writer, err := newDNSIntelWriter(logErr)
+	writer, domainWriter, err := newPipelineWriters(logErr)
 	if err != nil {
 		return nil, err
 	}
 	if err := resetIntelQueue(store); err != nil {
-		_ = writer.Close()
+		_ = closeWriters(writer, domainWriter)
 		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	p := &intelPipeline{
-		store:   store,
-		service: newDNSIntelService(dnsTimeoutMS),
-		writer:  writer,
-		ctx:     ctx,
-		cancel:  cancel,
-		done:    make(chan error, 1),
-		logErr:  logErr,
-		onDone:  onDone,
+		store:        store,
+		service:      newDNSIntelService(dnsTimeoutMS),
+		writer:       writer,
+		domainWriter: domainWriter,
+		generated:    generated,
+		ctx:          ctx,
+		cancel:       cancel,
+		done:         make(chan error, 1),
+		logErr:       logErr,
+		onDone:       onDone,
 	}
 	go p.consumeLoop()
 	return p, nil
+}
+
+func newPipelineWriters(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, *filewriter.NDJSONWriter, error) {
+	writer, err := newDNSIntelWriter(logErr)
+	if err != nil {
+		return nil, nil, err
+	}
+	domainWriter, err := newGeneratedDomainWriter(logErr)
+	if err != nil {
+		_ = writer.Close()
+		return nil, nil, err
+	}
+	return writer, domainWriter, nil
 }
 
 func (p *intelPipeline) EnqueueResolved(domain string) bool {
@@ -78,6 +95,25 @@ func (p *intelPipeline) EnqueueResolved(domain string) bool {
 		p.logErr("dns-intel-queue", domain, err)
 		return false
 	}
+	return true
+}
+
+func (p *intelPipeline) WriteUnresolved(domain string) bool {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return false
+	}
+	p.domainWriter.WriteRecord(unresolvedDomainRecord(domain, p.generatedMeta(domain)))
+	return true
+}
+
+func (p *intelPipeline) WriteResolvedFallback(domain string) bool {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return false
+	}
+	rec := intel.Record{Domain: domain}
+	p.domainWriter.WriteRecord(resolvedDomainRecord(rec, p.generatedMeta(domain)))
 	return true
 }
 
@@ -93,7 +129,7 @@ func (p *intelPipeline) StopAndWait() error {
 	consumeErr := <-p.done
 	p.cancel()
 
-	closeErr := p.writer.Close()
+	closeErr := closeWriters(p.writer, p.domainWriter)
 	cleanupErr := resetIntelQueue(p.store)
 	return errors.Join(stopErr, consumeErr, closeErr, cleanupErr)
 }
@@ -145,52 +181,16 @@ func (p *intelPipeline) processDomain(domain string) {
 	records, err := p.service.Run(runCtx, []intel.Domain{{Name: domain}})
 	if err != nil {
 		p.logErr("dns-intel-run", domain, err)
+		p.WriteResolvedFallback(domain)
 		return
 	}
+	if len(records) == 0 {
+		p.WriteResolvedFallback(domain)
+		return
+	}
+
 	for _, rec := range records {
 		p.writer.WriteRecord(intelRecordToNDJSON(rec))
+		p.domainWriter.WriteRecord(resolvedDomainRecord(rec, p.generatedMeta(rec.Domain)))
 	}
-}
-
-func newDNSIntelService(dnsTimeoutMS int64) *intel.DNSIntelService {
-	timeout := intelLookupTimeout(dnsTimeoutMS)
-	return intel.NewDNSIntelService(newDNSIntelResolver(), nil, 1, timeout)
-}
-
-func intelLookupTimeout(dnsTimeoutMS int64) time.Duration {
-	if dnsTimeoutMS <= 0 {
-		return 3 * time.Second
-	}
-	timeout := time.Duration(dnsTimeoutMS) * 6 * time.Millisecond
-	if timeout < 2*time.Second {
-		return 2 * time.Second
-	}
-	if timeout > 8*time.Second {
-		return 8 * time.Second
-	}
-	return timeout
-}
-
-func newDNSIntelWriter(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	if err := os.MkdirAll("Output", 0o755); err != nil {
-		return nil, err
-	}
-	opts := filewriter.NDJSONOptions{
-		BatchSize:  300,
-		FlushEvery: time.Second,
-		LogHooks: filewriter.LogHooks{
-			OnError: func(err error) {
-				if logErr != nil {
-					logErr("dns-intel-writer", "write", err)
-				}
-			},
-		},
-	}
-	return filewriter.NewNDJSONWriter("Output/DNS_Intel.ndjson", opts)
-}
-
-func resetIntelQueue(store intelQueueStore) error {
-	ctx, cancel := context.WithTimeout(context.Background(), intelQueueIOTime)
-	defer cancel()
-	return store.Delete(ctx, intelQueueKey)
 }

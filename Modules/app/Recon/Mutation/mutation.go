@@ -53,6 +53,29 @@ func loadKeywords(path string) ([]string, error) {
 	return keywords, nil
 }
 
+func runAlgorithmsByType(base string, cfg moduleConfig) map[string][]string {
+	byType := make(map[string][]string, 3)
+	if cfg.Character {
+		byType[algorithmCharacter] = charalg.Character(base)
+	}
+	if cfg.Seed {
+		byType[algorithmSeed] = seedalg.Seed(base)
+	}
+	if cfg.Hashchain {
+		byType[algorithmHashchain] = hashalg.Hashchain(base)
+	}
+	return byType
+}
+
+func runAlgorithms(base string, cfg moduleConfig) map[string]struct{} {
+	unique := make(map[string]struct{})
+	for _, candidates := range runAlgorithmsByType(base, cfg) {
+		appendUnique(unique, candidates)
+	}
+	delete(unique, base)
+	return unique
+}
+
 func appendUnique(dst map[string]struct{}, values []string) {
 	for _, value := range values {
 		if value == "" {
@@ -60,21 +83,6 @@ func appendUnique(dst map[string]struct{}, values []string) {
 		}
 		dst[value] = struct{}{}
 	}
-}
-
-func runAlgorithms(base string, cfg moduleConfig) map[string]struct{} {
-	unique := make(map[string]struct{})
-	if cfg.Character {
-		appendUnique(unique, charalg.Character(base))
-	}
-	if cfg.Seed {
-		appendUnique(unique, seedalg.Seed(base))
-	}
-	if cfg.Hashchain {
-		appendUnique(unique, hashalg.Hashchain(base))
-	}
-	delete(unique, base)
-	return unique
 }
 
 func toSorted(set map[string]struct{}) []string {
@@ -111,11 +119,7 @@ func Mutate(base string) []string {
 
 func mutateWithConfig(base string, cfg moduleConfig) []string {
 	clean := sanitizeKeyword(base)
-	if clean == "" {
-		return nil
-	}
-
-	if !cfg.Enabled {
+	if clean == "" || !cfg.Enabled {
 		return nil
 	}
 

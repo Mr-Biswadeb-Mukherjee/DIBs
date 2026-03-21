@@ -181,3 +181,42 @@ func TestGenerateDomains_MalformedCSV(t *testing.T) {
 		t.Fatalf("unexpected error for malformed CSV: %v", err)
 	}
 }
+
+func TestGenerateScoredDomains_HappyPath(t *testing.T) {
+	content := "domain\nexample\n"
+	path := "scored_domains.csv"
+
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write test CSV: %v", err)
+	}
+	defer os.Remove(path)
+
+	list, err := recon.GenerateScoredDomains(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(list) == 0 {
+		t.Fatalf("expected scored generated domains, got zero")
+	}
+
+	row := list[0]
+	if row.Domain == "" {
+		t.Fatalf("expected domain in scored output")
+	}
+	if row.RiskScore < 0 || row.RiskScore > 1 {
+		t.Fatalf("risk score must be normalized, got %f", row.RiskScore)
+	}
+	if row.Confidence == "" {
+		t.Fatalf("expected non-empty confidence")
+	}
+	if row.GeneratedBy == "" {
+		t.Fatalf("expected generated_by to be set")
+	}
+}
+
+func TestGenerateScoredDomains_FileNotFound(t *testing.T) {
+	_, err := recon.GenerateScoredDomains("missing_scored.csv")
+	if err == nil {
+		t.Fatalf("expected error for missing scored-domain input file")
+	}
+}

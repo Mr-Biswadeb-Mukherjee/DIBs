@@ -4,7 +4,6 @@ import (
 	"context"
 
 	dnsengine "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/DNS"
-	mutationgen "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon/Mutation"
 )
 
 // DNS interface defines only what recon actually uses.
@@ -35,11 +34,6 @@ func New(
 	return &Recon{
 		DNS: engine, // FIXED: no Engine type required
 	}
-}
-
-// GenerateDomains wraps domain generator with clean signature.
-func GenerateDomains(path string) ([]string, error) {
-	return mutationgen.GenerateFromCSV(path)
 }
 
 // Resolve uses only the interface, not any concrete type.

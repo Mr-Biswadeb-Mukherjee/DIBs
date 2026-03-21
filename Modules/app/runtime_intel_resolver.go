@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"math"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
+	recon "github.com/official-biswadeb941/Infermal_v2/Modules/app/Recon"
 	"github.com/official-biswadeb941/Infermal_v2/Modules/app/intel"
 )
 
@@ -21,6 +24,19 @@ type intelNDJSONRecord struct {
 	TimestampUTC string   `json:"timestamp_utc"`
 }
 
+type generatedDomainMeta struct {
+	RiskScore   float64
+	Confidence  string
+	GeneratedBy string
+}
+
+type generatedDomainNDJSONRecord struct {
+	Domain      string  `json:"domain"`
+	Score       float64 `json:"score"`
+	Confidence  string  `json:"confidence"`
+	GeneratedBy string  `json:"generated_by"`
+}
+
 func intelRecordToNDJSON(r intel.Record) intelNDJSONRecord {
 	return intelNDJSONRecord{
 		Domain:       r.Domain,
@@ -32,6 +48,70 @@ func intelRecordToNDJSON(r intel.Record) intelNDJSONRecord {
 		TXT:          r.TXT,
 		Providers:    r.Providers,
 		TimestampUTC: time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+func makeGeneratedDomainIndex(items []recon.GeneratedDomain) ([]string, map[string]generatedDomainMeta) {
+	domains := make([]string, 0, len(items))
+	index := make(map[string]generatedDomainMeta, len(items))
+
+	for _, item := range items {
+		domain := strings.ToLower(strings.TrimSpace(item.Domain))
+		if domain == "" {
+			continue
+		}
+		if _, ok := index[domain]; !ok {
+			domains = append(domains, domain)
+		}
+		index[domain] = normalizeGeneratedMeta(generatedDomainMeta{
+			RiskScore:   item.RiskScore,
+			Confidence:  item.Confidence,
+			GeneratedBy: item.GeneratedBy,
+		})
+	}
+	sort.Strings(domains)
+	return domains, index
+}
+
+func defaultGeneratedMeta() generatedDomainMeta {
+	return generatedDomainMeta{RiskScore: 0.25, Confidence: "low", GeneratedBy: "unknown"}
+}
+
+func normalizeGeneratedMeta(meta generatedDomainMeta) generatedDomainMeta {
+	fallback := defaultGeneratedMeta()
+	if meta.RiskScore < 0.0 {
+		meta.RiskScore = 0.0
+	}
+	if meta.RiskScore > 1.0 {
+		meta.RiskScore = 1.0
+	}
+	meta.RiskScore = math.Round(meta.RiskScore*100) / 100
+	if strings.TrimSpace(meta.Confidence) == "" {
+		meta.Confidence = fallback.Confidence
+	}
+	if strings.TrimSpace(meta.GeneratedBy) == "" {
+		meta.GeneratedBy = fallback.GeneratedBy
+	}
+	return meta
+}
+
+func unresolvedDomainRecord(domain string, meta generatedDomainMeta) generatedDomainNDJSONRecord {
+	normalized := normalizeGeneratedMeta(meta)
+	return generatedDomainNDJSONRecord{
+		Domain:      strings.ToLower(strings.TrimSpace(domain)),
+		Score:       normalized.RiskScore,
+		Confidence:  normalized.Confidence,
+		GeneratedBy: normalized.GeneratedBy,
+	}
+}
+
+func resolvedDomainRecord(rec intel.Record, meta generatedDomainMeta) generatedDomainNDJSONRecord {
+	normalized := normalizeGeneratedMeta(meta)
+	return generatedDomainNDJSONRecord{
+		Domain:      strings.ToLower(strings.TrimSpace(rec.Domain)),
+		Score:       normalized.RiskScore,
+		Confidence:  normalized.Confidence,
+		GeneratedBy: normalized.GeneratedBy,
 	}
 }
 

@@ -75,12 +75,13 @@ func Run(parentCtx context.Context) error {
 	)
 
 	// Domain generation
-	allGenerated, err := recon.GenerateDomains("Input/Keywords.csv")
+	scoredGenerated, err := recon.GenerateScoredDomains("Input/Keywords.csv")
 	if err != nil {
 		close(animStop)
 		appLog.Alert("domain generation failed: %v", err)
 		return fmt.Errorf("error processing Keywords.csv: %w", err)
 	}
+	allGenerated, generatedMeta := makeGeneratedDomainIndex(scoredGenerated)
 
 	total := int64(len(allGenerated))
 	if total == 0 {
@@ -145,7 +146,7 @@ func Run(parentCtx context.Context) error {
 		intelProgressRow(total, &intelDone),
 	})
 
-	intelPipe, err := newIntelPipeline(parentCtx, rdb, cfg.DNSTimeoutMS, logModuleError, func() {
+	intelPipe, err := newIntelPipeline(parentCtx, rdb, cfg.DNSTimeoutMS, generatedMeta, logModuleError, func() {
 		atomic.AddInt64(&intelDone, 1)
 	})
 	if err != nil {
@@ -169,6 +170,7 @@ func Run(parentCtx context.Context) error {
 		_, resCh, err := wp.SubmitTask(taskFunc, wpkg.Medium, 0)
 		if err != nil {
 			logModuleError("worker-submit", d, err)
+			intelPipe.WriteUnresolved(d)
 			atomic.AddInt64(&completed, 1)
 			atomic.AddInt64(&intelDone, 1)
 			continue
@@ -176,11 +178,12 @@ func Run(parentCtx context.Context) error {
 		atomic.AddInt64(&submitted, 1)
 
 		wg.Add(1)
-		go func(rc <-chan wpkg.WorkerResult) {
+		go func(domain string, rc <-chan wpkg.WorkerResult) {
 			defer wg.Done()
 
 			res, ok := <-rc
 			if !ok {
+				intelPipe.WriteUnresolved(domain)
 				atomic.AddInt64(&completed, 1)
 				atomic.AddInt64(&intelDone, 1)
 				return
@@ -189,9 +192,11 @@ func Run(parentCtx context.Context) error {
 			if s, ok := res.Result.(string); ok && s != "" {
 				atomic.AddInt64(&resolved, 1)
 				if !intelPipe.EnqueueResolved(s) {
+					intelPipe.WriteResolvedFallback(s)
 					atomic.AddInt64(&intelDone, 1)
 				}
 			} else {
+				intelPipe.WriteUnresolved(domain)
 				atomic.AddInt64(&intelDone, 1)
 			}
 			for _, taskErr := range res.Errors {
@@ -200,7 +205,7 @@ func Run(parentCtx context.Context) error {
 
 			atomic.AddInt64(&completed, 1)
 
-		}(resCh)
+		}(d, resCh)
 	}
 
 	wg.Wait()
@@ -213,6 +218,7 @@ func Run(parentCtx context.Context) error {
 	liveProgress.Finish()
 
 	ui.EndBanner(startTime, total, resolved)
+	fmt.Println("✔ Generated domains written to Output/Generated_Domains.ndjson")
 	fmt.Println("✔ DNS intel written to Output/DNS_Intel.ndjson")
 	appLog.Info("run completed generated=%d resolved=%d", total, resolved)
 
