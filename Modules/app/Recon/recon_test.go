@@ -220,3 +220,31 @@ func TestGenerateScoredDomains_FileNotFound(t *testing.T) {
 		t.Fatalf("expected error for missing scored-domain input file")
 	}
 }
+
+func TestIsValidDomain_RejectsIllegalChars(t *testing.T) {
+	cases := []struct {
+		domain string
+		valid  bool
+	}{
+		{domain: "example.in", valid: true},
+		{domain: "&mem.in", valid: false},
+		{domain: "a-b.in", valid: false},
+		{domain: `a\\b.in`, valid: false},
+	}
+
+	for _, tc := range cases {
+		got := recon.IsValidDomain(tc.domain)
+		if got != tc.valid {
+			t.Fatalf("IsValidDomain(%q)=%v want=%v", tc.domain, got, tc.valid)
+		}
+	}
+}
+
+func TestIsHumanLikeDomain_FiltersMachineLikeLabels(t *testing.T) {
+	if recon.IsHumanLikeDomain("x9q2z8m1.in") {
+		t.Fatalf("expected machine-like domain to be rejected")
+	}
+	if !recon.IsHumanLikeDomain("securepay.in") {
+		t.Fatalf("expected attacker-like readable domain to pass")
+	}
+}

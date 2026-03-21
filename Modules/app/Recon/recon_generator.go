@@ -45,7 +45,11 @@ func GenerateScoredDomains(path string) ([]GeneratedDomain, error) {
 	}
 
 	candidates := collectCandidates(mutationCandidates, dgaCandidates)
-	return scoreCandidates(candidates), nil
+	validCandidates := validateCandidates(candidates)
+	scoredDomains := scoreCandidates(validCandidates)
+	filteredDomains := filterCandidates(scoredDomains)
+	humanLikeDomains := filterHumanLikeCandidates(filteredDomains)
+	return humanLikeDomains, nil
 }
 
 func collectCandidates(
@@ -88,10 +92,7 @@ func mergeCandidate(dst map[string]candidateMeta, rawDomain, algorithm string, m
 func scoreCandidates(candidates map[string]candidateMeta) []GeneratedDomain {
 	out := make([]GeneratedDomain, 0, len(candidates))
 	for domain, meta := range candidates {
-		candidate, ok := scoreCandidate(domain, meta)
-		if ok {
-			out = append(out, candidate)
-		}
+		out = append(out, scoreCandidate(domain, meta))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Domain < out[j].Domain
@@ -99,13 +100,9 @@ func scoreCandidates(candidates map[string]candidateMeta) []GeneratedDomain {
 	return out
 }
 
-func scoreCandidate(domain string, meta candidateMeta) (GeneratedDomain, bool) {
+func scoreCandidate(domain string, meta candidateMeta) GeneratedDomain {
 	label := domainLabel(domain)
 	entropy := shannonEntropy(label)
-	if entropy < lowEntropyDropThreshold {
-		return GeneratedDomain{}, false
-	}
-
 	score := baseRisk(meta) + entropyBoost(entropy) + lexicalBoost(label) + algorithmBoost(meta.Algorithms)
 	score = clampRisk(score)
 	return GeneratedDomain{
@@ -113,7 +110,18 @@ func scoreCandidate(domain string, meta candidateMeta) (GeneratedDomain, bool) {
 		RiskScore:   score,
 		Confidence:  scoreConfidence(score),
 		GeneratedBy: algorithmNames(meta.Algorithms),
-	}, true
+	}
+}
+
+func filterCandidates(scored []GeneratedDomain) []GeneratedDomain {
+	out := make([]GeneratedDomain, 0, len(scored))
+	for _, candidate := range scored {
+		if shannonEntropy(domainLabel(candidate.Domain)) < lowEntropyDropThreshold {
+			continue
+		}
+		out = append(out, candidate)
+	}
+	return out
 }
 
 func baseRisk(meta candidateMeta) float64 {
