@@ -4,9 +4,7 @@
 package app
 
 import (
-	"context"
 	"math"
-	"net"
 	"sort"
 	"strings"
 	"time"
@@ -108,80 +106,12 @@ func unresolvedDomainRecord(domain string, meta generatedDomainMeta) generatedDo
 	}
 }
 
-func resolvedDomainRecord(rec intel.Record, meta generatedDomainMeta) generatedDomainNDJSONRecord {
+func resolvedDomainRecord(domain string, meta generatedDomainMeta) generatedDomainNDJSONRecord {
 	normalized := normalizeGeneratedMeta(meta)
 	return generatedDomainNDJSONRecord{
-		Domain:      strings.ToLower(strings.TrimSpace(rec.Domain)),
+		Domain:      strings.ToLower(strings.TrimSpace(domain)),
 		Score:       normalized.RiskScore,
 		Confidence:  normalized.Confidence,
 		GeneratedBy: normalized.GeneratedBy,
 	}
-}
-
-type dnsIntelResolver struct {
-	resolver *net.Resolver
-}
-
-func newDNSIntelResolver() *dnsIntelResolver {
-	return &dnsIntelResolver{resolver: net.DefaultResolver}
-}
-
-func (r *dnsIntelResolver) LookupA(ctx context.Context, domain string) ([]string, error) {
-	return r.lookupIP(ctx, domain, "ip4")
-}
-
-func (r *dnsIntelResolver) LookupAAAA(ctx context.Context, domain string) ([]string, error) {
-	return r.lookupIP(ctx, domain, "ip6")
-}
-
-func (r *dnsIntelResolver) lookupIP(ctx context.Context, domain, network string) ([]string, error) {
-	ips, err := r.resolver.LookupIP(ctx, network, domain)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(ips))
-	for _, ip := range ips {
-		out = append(out, ip.String())
-	}
-	return out, nil
-}
-
-func (r *dnsIntelResolver) LookupCNAME(ctx context.Context, domain string) ([]string, error) {
-	cname, err := r.resolver.LookupCNAME(ctx, domain)
-	if err != nil {
-		return nil, err
-	}
-	return []string{trimDNSHost(cname)}, nil
-}
-
-func (r *dnsIntelResolver) LookupNS(ctx context.Context, domain string) ([]string, error) {
-	ns, err := r.resolver.LookupNS(ctx, domain)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(ns))
-	for _, rec := range ns {
-		out = append(out, trimDNSHost(rec.Host))
-	}
-	return out, nil
-}
-
-func (r *dnsIntelResolver) LookupMX(ctx context.Context, domain string) ([]string, error) {
-	mx, err := r.resolver.LookupMX(ctx, domain)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(mx))
-	for _, rec := range mx {
-		out = append(out, trimDNSHost(rec.Host))
-	}
-	return out, nil
-}
-
-func (r *dnsIntelResolver) LookupTXT(ctx context.Context, domain string) ([]string, error) {
-	return r.resolver.LookupTXT(ctx, domain)
-}
-
-func trimDNSHost(host string) string {
-	return strings.TrimSuffix(host, ".")
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	recon "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon"
-	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
 )
 
 func TestMakeGeneratedDomainIndexNormalizesAndSorts(t *testing.T) {
@@ -45,7 +44,7 @@ func TestGeneratedDomainRecordHelpersNormalizeValues(t *testing.T) {
 		t.Fatalf("unexpected unresolved record: %#v", unresolved)
 	}
 
-	resolved := resolvedDomainRecord(intel.Record{Domain: " MAIL.EXAMPLE.COM "}, meta)
+	resolved := resolvedDomainRecord(" MAIL.EXAMPLE.COM ", meta)
 	if resolved.Domain != "mail.example.com" {
 		t.Fatalf("unexpected resolved domain: %q", resolved.Domain)
 	}
@@ -79,9 +78,6 @@ func TestRuntimeHelpersBuildSnapshotAndTimeouts(t *testing.T) {
 	}
 	if got := intelLookupTimeout(2000); got != 8*time.Second {
 		t.Fatalf("unexpected max timeout clamp: %s", got)
-	}
-	if got := trimDNSHost("ns1.example.com."); got != "ns1.example.com" {
-		t.Fatalf("unexpected trimmed host: %q", got)
 	}
 	if got := ceilSeconds(1500 * time.Millisecond); got != 2 {
 		t.Fatalf("unexpected ceilSeconds result: %d", got)

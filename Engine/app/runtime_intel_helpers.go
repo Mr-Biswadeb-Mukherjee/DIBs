@@ -6,15 +6,13 @@ package app
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
-	filewriter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/filewriter"
 )
 
-func closeWriters(writers ...*filewriter.NDJSONWriter) error {
+func closeWriters(writers ...RecordWriter) error {
 	var errs []error
 	for _, writer := range writers {
 		if writer == nil {
@@ -40,7 +38,7 @@ func (p *intelPipeline) generatedMeta(domain string) generatedDomainMeta {
 
 func newDNSIntelService(dnsTimeoutMS int64) *intel.DNSIntelService {
 	timeout := intelLookupTimeout(dnsTimeoutMS)
-	return intel.NewDNSIntelService(newDNSIntelResolver(), nil, 1, timeout)
+	return intel.NewDefaultDNSIntelService(1, timeout)
 }
 
 func intelLookupTimeout(dnsTimeoutMS int64) time.Duration {
@@ -57,25 +55,32 @@ func intelLookupTimeout(dnsTimeoutMS int64) time.Duration {
 	return timeout
 }
 
-func newDNSIntelWriter(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	if err := os.MkdirAll(outputDir(), 0o750); err != nil {
-		return nil, err
-	}
-	return newNDJSONWriter(outputFile("DNS_Intel.ndjson"), "dns-intel-writer", logErr)
+func newDNSIntelWriter(
+	paths Paths,
+	writers WriterFactory,
+	logErr moduleErrorLogger,
+) (RecordWriter, error) {
+	return newNDJSONWriter(paths.DNSIntelOutput, writers, "dns-intel-writer", logErr)
 }
 
-func newGeneratedDomainWriter(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	if err := os.MkdirAll(outputDir(), 0o750); err != nil {
-		return nil, err
-	}
-	return newNDJSONWriter(outputFile("Generated_Domains.ndjson"), "generated-domain-writer", logErr)
+func newGeneratedDomainWriter(
+	paths Paths,
+	writers WriterFactory,
+	logErr moduleErrorLogger,
+) (RecordWriter, error) {
+	return newNDJSONWriter(paths.GeneratedOutput, writers, "generated-domain-writer", logErr)
 }
 
-func newNDJSONWriter(path, module string, logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	opts := filewriter.NDJSONOptions{
+func newNDJSONWriter(
+	path string,
+	writers WriterFactory,
+	module string,
+	logErr moduleErrorLogger,
+) (RecordWriter, error) {
+	opts := WriterOptions{
 		BatchSize:  300,
 		FlushEvery: time.Second,
-		LogHooks: filewriter.LogHooks{
+		LogHooks: WriterLogHooks{
 			OnError: func(err error) {
 				if logErr != nil {
 					logErr(module, "write", err)
@@ -83,7 +88,7 @@ func newNDJSONWriter(path, module string, logErr moduleErrorLogger) (*filewriter
 			},
 		},
 	}
-	return filewriter.NewNDJSONWriter(path, opts)
+	return writers.NewNDJSONWriter(path, opts)
 }
 
 func resetIntelQueue(store intelQueueStore) error {

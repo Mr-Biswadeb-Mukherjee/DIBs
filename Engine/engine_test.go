@@ -18,15 +18,16 @@ func TestRunInvokesAppRunner(t *testing.T) {
 
 	var gotCtx context.Context
 	var lines []string
-	runApp = func(ctx context.Context) error {
+	runApp = func(ctx context.Context, deps Dependencies) error {
 		gotCtx = ctx
+		_ = deps
 		return nil
 	}
 	printLine = func(args ...any) {
 		lines = append(lines, strings.TrimSpace(fmt.Sprintln(args...)))
 	}
 
-	Run()
+	Run(Dependencies{})
 
 	if gotCtx == nil {
 		t.Fatal("expected Run to pass a context to app runner")
@@ -48,14 +49,14 @@ func TestRunPrintsErrorAndShutdown(t *testing.T) {
 	})
 
 	var lines []string
-	runApp = func(context.Context) error {
+	runApp = func(context.Context, Dependencies) error {
 		return errors.New("boom")
 	}
 	printLine = func(args ...any) {
 		lines = append(lines, strings.TrimSpace(fmt.Sprintln(args...)))
 	}
 
-	Run()
+	Run(Dependencies{})
 
 	if len(lines) != 2 {
 		t.Fatalf("expected two printed lines, got %d", len(lines))
@@ -76,7 +77,8 @@ func TestRunCreatesUsableContext(t *testing.T) {
 		printLine = oldPrinter
 	})
 
-	runApp = func(ctx context.Context) error {
+	runApp = func(ctx context.Context, deps Dependencies) error {
+		_ = deps
 		select {
 		case <-ctx.Done():
 			t.Fatal("background context should not be canceled")
@@ -86,5 +88,5 @@ func TestRunCreatesUsableContext(t *testing.T) {
 	}
 	printLine = func(args ...any) {}
 
-	Run()
+	Run(Dependencies{})
 }

@@ -9,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	cooldown "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/cooldown"
 )
 
 const (
@@ -194,7 +192,7 @@ func buildProgressBar(cur, total int64, width int) string {
 	return "|" + strings.Repeat("█", filled) + strings.Repeat(" ", width-filled) + "|"
 }
 
-func resolveProgressRow(total int64, completed *int64, cdm *cooldown.Manager) *progressRow {
+func resolveProgressRow(total int64, completed *int64, cdm CooldownManager) *progressRow {
 	return &progressRow{
 		label: "Resolving domains",
 		color: colorGreen,

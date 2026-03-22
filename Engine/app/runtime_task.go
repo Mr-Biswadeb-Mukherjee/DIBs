@@ -6,18 +6,10 @@ package app
 import (
 	"context"
 	"time"
-
-	cooldown "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/cooldown"
-	ratelimiter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/ratelimiter"
 )
 
 type dnsResolver interface {
 	Resolve(ctx context.Context, domain string) (bool, error)
-}
-
-type cacheStore interface {
-	GetValue(ctx context.Context, key string) (string, error)
-	SetValue(ctx context.Context, key string, v interface{}, ttl time.Duration) error
 }
 
 type moduleErrorLogger func(module, scope string, err error)
@@ -25,12 +17,13 @@ type moduleErrorLogger func(module, scope string, err error)
 func makeDomainTask(
 	domain string,
 	resolver dnsResolver,
-	cache cacheStore,
-	cdm *cooldown.Manager,
+	cache CacheStore,
+	cdm CooldownManager,
+	limiter RateLimiter,
 	tuner *runtimeTuner,
 	successTTL, failTTL time.Duration,
 	logErr moduleErrorLogger,
-) func(context.Context) (interface{}, []string, []string, []error) {
+) TaskFunc {
 	return func(ctx context.Context) (interface{}, []string, []string, []error) {
 		if val, hit := readDomainCache(ctx, cache, domain); hit {
 			if val {
@@ -43,7 +36,7 @@ func makeDomainTask(
 			return nil, nil, nil, errs
 		}
 
-		denied, errs := waitForRateLimit(ctx, domain, tuner, logErr)
+		denied, errs := waitForRateLimit(ctx, domain, limiter, tuner, logErr)
 		if len(errs) > 0 {
 			return nil, nil, nil, errs
 		}
@@ -62,7 +55,7 @@ func makeDomainTask(
 	}
 }
 
-func readDomainCache(ctx context.Context, cache cacheStore, domain string) (bool, bool) {
+func readDomainCache(ctx context.Context, cache CacheStore, domain string) (bool, bool) {
 	cacheCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
 
@@ -79,7 +72,7 @@ func readDomainCache(ctx context.Context, cache cacheStore, domain string) (bool
 	return false, false
 }
 
-func waitForCooldown(ctx context.Context, cdm *cooldown.Manager) []error {
+func waitForCooldown(ctx context.Context, cdm CooldownManager) []error {
 	if !cdm.Active() {
 		return nil
 	}
@@ -95,6 +88,7 @@ func waitForCooldown(ctx context.Context, cdm *cooldown.Manager) []error {
 func waitForRateLimit(
 	ctx context.Context,
 	domain string,
+	limiter RateLimiter,
 	tuner *runtimeTuner,
 	logErr moduleErrorLogger,
 ) (int64, []error) {
@@ -106,7 +100,7 @@ func waitForRateLimit(
 		default:
 		}
 
-		allowed, err := ratelimiter.RateLimit(ctx, "dns-rate")
+		allowed, err := limiter.Allow(ctx, "dns-rate")
 		if err != nil {
 			logErr("ratelimiter", domain, err)
 			tuner.observeLimiterError()
@@ -138,7 +132,7 @@ func resolveDomain(
 
 func writeCache(
 	ctx context.Context,
-	cache cacheStore,
+	cache CacheStore,
 	domain, value string,
 	ttl time.Duration,
 	logErr moduleErrorLogger,

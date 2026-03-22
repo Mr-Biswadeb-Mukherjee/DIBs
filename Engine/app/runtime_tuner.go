@@ -9,11 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	adaptive "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/adaptive"
-	config "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/config"
-	cooldown "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/cooldown"
-	ratelimiter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/ratelimiter"
 )
 
 type runtimeCounters struct {
@@ -28,20 +23,27 @@ type runtimeLogger interface {
 }
 
 type runtimeTuner struct {
-	controller   *adaptive.Controller
+	controller   AdaptiveController
+	limiter      RateLimiter
 	timeoutNanos atomic.Int64
 	logTick      atomic.Int64
 }
 
-func newRuntimeTuner(cfg config.Config, total int64, workers int) *runtimeTuner {
+func newRuntimeTuner(
+	cfg Config,
+	total int64,
+	workers int,
+	factory AdaptiveFactory,
+	limiter RateLimiter,
+) *runtimeTuner {
 	seedRate := seedRateLimit(cfg.RateLimit, total, workers)
 	seedTimeout := seedTimeoutValue(cfg.TimeoutSeconds, total)
-	ctrlCfg := adaptive.DefaultConfig(seedRate, seedTimeout, int64(workers))
 
 	tuner := &runtimeTuner{
-		controller: adaptive.NewController(ctrlCfg),
+		controller: factory.NewController(seedRate, seedTimeout, int64(workers)),
+		limiter:    limiter,
 	}
-	tuner.timeoutNanos.Store(ctrlCfg.InitialTimeout.Nanoseconds())
+	tuner.timeoutNanos.Store(seedTimeout.Nanoseconds())
 	return tuner
 }
 
@@ -66,7 +68,7 @@ func (t *runtimeTuner) observeLimiterError() {
 
 func (t *runtimeTuner) run(
 	ctx context.Context,
-	cdm *cooldown.Manager,
+	cdm CooldownManager,
 	counters runtimeCounters,
 	log runtimeLogger,
 ) {
@@ -83,7 +85,7 @@ func (t *runtimeTuner) run(
 			lastCompleted = completed
 			decision := t.controller.Evaluate(snap)
 			t.timeoutNanos.Store(decision.Timeout.Nanoseconds())
-			if err := ratelimiter.SetMaxHits(decision.RateLimit); err != nil && log != nil {
+			if err := t.limiter.SetMaxHits(decision.RateLimit); err != nil && log != nil {
 				log.Warning("adaptive ratelimit update failed: %v", err)
 			}
 			if decision.Cooldown > 0 {
@@ -94,7 +96,7 @@ func (t *runtimeTuner) run(
 	}
 }
 
-func (t *runtimeTuner) logDecision(log runtimeLogger, d adaptive.Decision, s adaptive.Snapshot) {
+func (t *runtimeTuner) logDecision(log runtimeLogger, d AdaptiveDecision, s AdaptiveSnapshot) {
 	if log == nil {
 		return
 	}
@@ -116,7 +118,7 @@ func (t *runtimeTuner) logDecision(log runtimeLogger, d adaptive.Decision, s ada
 	)
 }
 
-func buildSnapshot(c runtimeCounters, lastCompleted int64) (adaptive.Snapshot, int64) {
+func buildSnapshot(c runtimeCounters, lastCompleted int64) (AdaptiveSnapshot, int64) {
 	submitted := atomic.LoadInt64(c.submitted)
 	completed := atomic.LoadInt64(c.completed)
 	active := atomic.LoadInt64(c.active)
@@ -139,7 +141,7 @@ func buildSnapshot(c runtimeCounters, lastCompleted int64) (adaptive.Snapshot, i
 		delta = 0
 	}
 
-	return adaptive.Snapshot{
+	return AdaptiveSnapshot{
 		QueueDepth:     queueDepth,
 		InFlight:       inFlight,
 		ActiveWorkers:  active,

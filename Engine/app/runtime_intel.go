@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
-	filewriter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/filewriter"
 )
 
 const (
@@ -31,8 +30,8 @@ type intelQueueStore interface {
 type intelPipeline struct {
 	store        intelQueueStore
 	service      *intel.DNSIntelService
-	writer       *filewriter.NDJSONWriter
-	domainWriter *filewriter.NDJSONWriter
+	writer       RecordWriter
+	domainWriter RecordWriter
 	generated    map[string]generatedDomainMeta
 
 	ctx    context.Context
@@ -46,11 +45,13 @@ func newIntelPipeline(
 	parentCtx context.Context,
 	store intelQueueStore,
 	dnsTimeoutMS int64,
+	writerFactory WriterFactory,
+	paths Paths,
 	generated map[string]generatedDomainMeta,
 	logErr moduleErrorLogger,
 	onDone func(),
 ) (*intelPipeline, error) {
-	writer, domainWriter, err := newPipelineWriters(logErr)
+	writer, domainWriter, err := newPipelineWriters(writerFactory, paths, logErr)
 	if err != nil {
 		return nil, err
 	}
@@ -76,12 +77,16 @@ func newIntelPipeline(
 	return p, nil
 }
 
-func newPipelineWriters(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, *filewriter.NDJSONWriter, error) {
-	writer, err := newDNSIntelWriter(logErr)
+func newPipelineWriters(
+	writerFactory WriterFactory,
+	paths Paths,
+	logErr moduleErrorLogger,
+) (RecordWriter, RecordWriter, error) {
+	writer, err := newDNSIntelWriter(paths, writerFactory, logErr)
 	if err != nil {
 		return nil, nil, err
 	}
-	domainWriter, err := newGeneratedDomainWriter(logErr)
+	domainWriter, err := newGeneratedDomainWriter(paths, writerFactory, logErr)
 	if err != nil {
 		_ = writer.Close()
 		return nil, nil, err
@@ -115,8 +120,7 @@ func (p *intelPipeline) WriteResolvedFallback(domain string) bool {
 	if domain == "" {
 		return false
 	}
-	rec := intel.Record{Domain: domain}
-	p.domainWriter.WriteRecord(resolvedDomainRecord(rec, p.generatedMeta(domain)))
+	p.domainWriter.WriteRecord(resolvedDomainRecord(domain, p.generatedMeta(domain)))
 	return true
 }
 
@@ -194,6 +198,6 @@ func (p *intelPipeline) processDomain(domain string) {
 
 	for _, rec := range records {
 		p.writer.WriteRecord(intelRecordToNDJSON(rec))
-		p.domainWriter.WriteRecord(resolvedDomainRecord(rec, p.generatedMeta(rec.Domain)))
+		p.domainWriter.WriteRecord(resolvedDomainRecord(rec.Domain, p.generatedMeta(rec.Domain)))
 	}
 }

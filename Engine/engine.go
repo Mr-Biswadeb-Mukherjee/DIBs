@@ -16,10 +16,10 @@ var printLine = func(args ...any) {
 	fmt.Println(args...)
 }
 
-func Run() {
+func Run(deps Dependencies) {
 	ctx := context.Background()
 
-	if err := runApp(ctx); err != nil {
+	if err := runApp(ctx, deps); err != nil {
 		printLine("Error:", err.Error())
 	}
 

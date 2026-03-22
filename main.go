@@ -3,8 +3,18 @@
 
 package main
 
-import engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+import (
+	"fmt"
+
+	engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+	bootstrap "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/bootstrap"
+)
 
 func main() {
-	engine.Run()
+	deps, err := bootstrap.BuildEngineDependencies()
+	if err != nil {
+		fmt.Println("Error:", err.Error())
+		return
+	}
+	engine.Run(deps)
 }
