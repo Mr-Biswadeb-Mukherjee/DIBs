@@ -98,3 +98,17 @@ func TestGenerateFromCSV(t *testing.T) {
 		t.Fatalf("GenerateFromCSV error: %v", err)
 	}
 }
+
+func TestLoadKeywordsRejectsNonCSVPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.txt")
+
+	if err := os.WriteFile(path, []byte("domain\nexample\n"), 0o644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	_, err := loadKeywords(path)
+	if err == nil {
+		t.Fatal("expected non-csv path to be rejected")
+	}
+}

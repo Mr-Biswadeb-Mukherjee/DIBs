@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	bs "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/Modules/app/Recon/dga/bitsquatting"
@@ -46,7 +47,12 @@ func sanitizeKeyword(s string) string {
 // ---------------------------------------------------
 
 func loadKeywords(path string) ([]string, error) {
-	f, err := os.Open(path)
+	cleanPath, err := sanitizeCSVPath(path)
+	if err != nil {
+		return nil, err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeCSVPath.
+	f, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CSV: %w", err)
 	}
@@ -75,6 +81,22 @@ func loadKeywords(path string) ([]string, error) {
 		}
 	}
 	return list, nil
+}
+
+func sanitizeCSVPath(path string) (string, error) {
+	raw := strings.TrimSpace(path)
+	if raw == "" {
+		return "", fmt.Errorf("csv path is empty")
+	}
+
+	cleanPath := filepath.Clean(raw)
+	if !strings.EqualFold(filepath.Ext(cleanPath), ".csv") {
+		return "", fmt.Errorf("csv path must end with .csv: %s", cleanPath)
+	}
+	if info, err := os.Stat(cleanPath); err == nil && info.IsDir() {
+		return "", fmt.Errorf("csv path is a directory: %s", cleanPath)
+	}
+	return cleanPath, nil
 }
 
 // ---------------------------------------------------

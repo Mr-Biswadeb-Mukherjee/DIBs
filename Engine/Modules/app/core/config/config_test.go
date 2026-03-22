@@ -222,3 +222,12 @@ func TestDefaultFileContainsAllKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadOrCreateConfig_RejectsDirectoryPath(t *testing.T) {
+	tmp := t.TempDir()
+
+	_, err := config.LoadOrCreateConfig(tmp)
+	if err == nil {
+		t.Fatal("expected directory path to be rejected")
+	}
+}

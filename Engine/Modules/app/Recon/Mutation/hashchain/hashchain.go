@@ -4,7 +4,7 @@
 package hashchain
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"sort"
 	"strings"
@@ -47,7 +47,7 @@ func chainHexes(base string, rounds int) []string {
 	out := make([]string, 0, rounds)
 
 	for i := 0; i < rounds; i++ {
-		sum := sha1.Sum(seed)
+		sum := sha256.Sum256(seed)
 		hexed := hex.EncodeToString(sum[:])
 		out = append(out, hexed)
 		seed = []byte(hexed)

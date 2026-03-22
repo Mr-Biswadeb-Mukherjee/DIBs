@@ -58,14 +58,14 @@ func intelLookupTimeout(dnsTimeoutMS int64) time.Duration {
 }
 
 func newDNSIntelWriter(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	if err := os.MkdirAll(outputDir(), 0o755); err != nil {
+	if err := os.MkdirAll(outputDir(), 0o750); err != nil {
 		return nil, err
 	}
 	return newNDJSONWriter(outputFile("DNS_Intel.ndjson"), "dns-intel-writer", logErr)
 }
 
 func newGeneratedDomainWriter(logErr moduleErrorLogger) (*filewriter.NDJSONWriter, error) {
-	if err := os.MkdirAll(outputDir(), 0o755); err != nil {
+	if err := os.MkdirAll(outputDir(), 0o750); err != nil {
 		return nil, err
 	}
 	return newNDJSONWriter(outputFile("Generated_Domains.ndjson"), "generated-domain-writer", logErr)

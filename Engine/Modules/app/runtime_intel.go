@@ -15,7 +15,7 @@ import (
 
 const (
 	intelQueueKey    = "dns:intel:queue"
-	intelStopToken   = "__infermal_dns_intel_stop__"
+	intelStopMarker  = "__infermal_dns_intel_stop__"
 	intelQueueTTL    = 20 * time.Minute
 	intelQueueWait   = 1 * time.Second
 	intelQueueIOTime = 400 * time.Millisecond
@@ -125,7 +125,7 @@ func (p *intelPipeline) StopAndWait() error {
 		return nil
 	}
 
-	stopErr := p.pushValue(context.Background(), intelStopToken)
+	stopErr := p.pushValue(context.Background(), intelStopMarker)
 	if stopErr != nil {
 		p.cancel()
 	}
@@ -151,7 +151,7 @@ func (p *intelPipeline) consumeLoop() {
 		if !ok {
 			continue
 		}
-		if value == intelStopToken {
+		if value == intelStopMarker {
 			p.done <- nil
 			return
 		}

@@ -44,29 +44,41 @@ var defaultConfig = Config{
 }
 
 func LoadOrCreateConfig(path string) (Config, error) {
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	cleanPath, err := sanitizeConfigPath(path)
+	if err != nil {
+		return defaultConfig, err
+	}
+	if err := os.MkdirAll(filepath.Dir(cleanPath), 0o750); err != nil {
+		return defaultConfig, err
+	}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// Create new config file with default values
-		err := writeDefault(path)
-		if err != nil {
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		if err := writeDefault(cleanPath); err != nil {
 			return defaultConfig, err
 		}
 		return defaultConfig, nil
 	}
-
-	// Parse existing config
-	return parseConfig(path)
+	return parseConfig(cleanPath)
 }
 
 func writeDefault(path string) error {
-	f, err := os.Create(path)
+	cleanPath, err := sanitizeConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeConfigPath.
+	f, err := os.Create(cleanPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	_, err = f.WriteString(fmt.Sprintf(
+	_, err = f.WriteString(defaultConfigText())
+	return err
+}
+
+func defaultConfigText() string {
+	return fmt.Sprintf(
 		"# Worker / Performance\n"+
 			"rate_limit=%s\n"+
 			"cooldown_after=%s\n"+
@@ -89,13 +101,16 @@ func writeDefault(path string) error {
 		defaultConfig.BackupDNS,
 		defaultConfig.DNSRetries,
 		defaultConfig.DNSTimeoutMS,
-	))
-
-	return err
+	)
 }
 
 func parseConfig(path string) (Config, error) {
-	file, err := os.Open(path)
+	cleanPath, err := sanitizeConfigPath(path)
+	if err != nil {
+		return defaultConfig, err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeConfigPath.
+	file, err := os.Open(cleanPath)
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -103,50 +118,62 @@ func parseConfig(path string) (Config, error) {
 
 	cfg := defaultConfig
 	scanner := bufio.NewScanner(file)
-
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
+		applyConfigLine(&cfg, scanner.Text())
+	}
+	return cfg, scanner.Err()
+}
 
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		key, value := parts[0], parts[1]
-
-		switch key {
-
-		// Worker / Performance
-		case "rate_limit":
-			cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit)
-		case "cooldown_after":
-			cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter)
-		case "cooldown_duration":
-			cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration)
-		case "timeout_seconds":
-			cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds)
-		case "max_retries":
-			cfg.MaxRetries, _ = strconv.Atoi(value)
-		case "autoscale":
-			cfg.AutoScale = (value == "true")
-
-		// DNS
-		case "upstream_dns":
-			cfg.UpstreamDNS = value
-		case "backup_dns":
-			cfg.BackupDNS = value
-		case "dns_retries":
-			cfg.DNSRetries, _ = strconv.Atoi(value)
-		case "dns_timeout_ms":
-			ms, _ := strconv.Atoi(value)
-			cfg.DNSTimeoutMS = int64(ms)
-		}
+func applyConfigLine(cfg *Config, line string) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return
 	}
 
-	return cfg, scanner.Err()
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return
+	}
+	applyConfigValue(cfg, parts[0], parts[1])
+}
+
+func applyConfigValue(cfg *Config, key, value string) {
+	switch key {
+	case "rate_limit":
+		cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit)
+	case "cooldown_after":
+		cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter)
+	case "cooldown_duration":
+		cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration)
+	case "timeout_seconds":
+		cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds)
+	case "max_retries":
+		cfg.MaxRetries, _ = strconv.Atoi(value)
+	case "autoscale":
+		cfg.AutoScale = (value == "true")
+	case "upstream_dns":
+		cfg.UpstreamDNS = value
+	case "backup_dns":
+		cfg.BackupDNS = value
+	case "dns_retries":
+		cfg.DNSRetries, _ = strconv.Atoi(value)
+	case "dns_timeout_ms":
+		ms, _ := strconv.Atoi(value)
+		cfg.DNSTimeoutMS = int64(ms)
+	}
+}
+
+func sanitizeConfigPath(path string) (string, error) {
+	raw := strings.TrimSpace(path)
+	if raw == "" {
+		return "", fmt.Errorf("config path is empty")
+	}
+
+	cleanPath := filepath.Clean(raw)
+	if info, err := os.Stat(cleanPath); err == nil && info.IsDir() {
+		return "", fmt.Errorf("config path is a directory: %s", cleanPath)
+	}
+	return cleanPath, nil
 }
 
 func formatAutoInt(v int) string {
