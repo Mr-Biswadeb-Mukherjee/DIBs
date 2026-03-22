@@ -11,15 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func rrTaskReturningID() TaskFunc {
-	return func(ctx context.Context) (interface{}, []string, []string, []error) {
-		// Worker ID is inferred by context value which WorkerPool injects via exec()
-		// But WorkerPool does NOT give worker ID in ctx.
-		// So instead, we capture worker ID via closure injection at Submit-time.
-		return "NO_ID", nil, nil, nil
-	}
-}
-
 // We override submit with an injected wrapper that returns worker ID.
 func rrTaskCaptureWorkerID(workerID *int) TaskFunc {
 	return func(ctx context.Context) (interface{}, []string, []string, []error) {

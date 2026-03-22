@@ -12,31 +12,6 @@ import (
 	"time"
 )
 
-func taskKey(id int64) string {
-	return fmt.Sprintf("task:%d", id)
-}
-
-func taskResultKey(id int64) string {
-	return fmt.Sprintf("task:%d:result", id)
-}
-
-func taskStatusKey(id int64) string {
-	return fmt.Sprintf("task:%d:status", id)
-}
-
-func taskDedupeKey(key string) string {
-	return fmt.Sprintf("dedupe:%s", key)
-}
-
-func workerStateKey(id int) string {
-	return fmt.Sprintf("worker:%d:state", id)
-}
-
-// Queue key for Redis ZSET
-func redisQueueKey() string {
-	return "tasks:queue"
-}
-
 func logMessage(ch chan string, msg string, nonblock bool) {
 	if ch == nil {
 		return

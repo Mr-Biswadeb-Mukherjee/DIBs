@@ -17,6 +17,8 @@ import (
 // INTERNAL IMPLEMENTATION LAYER
 // -----------------------------
 
+type csvRow []string
+
 type CSVWriter struct {
 	filename string
 	mode     Mode
@@ -27,7 +29,7 @@ type CSVWriter struct {
 	file   *os.File
 	writer *csv.Writer
 
-	rows chan []string
+	rows chan *csvRow
 	wg   sync.WaitGroup
 
 	batchSize  int
@@ -56,10 +58,11 @@ func NewWriter(filename string, opts CSVOptions) (*CSVWriter, error) {
 		ctx:    ctx,
 		cancel: cancel,
 
-		rows: make(chan []string, opts.BatchSize*2),
+		rows: make(chan *csvRow, opts.BatchSize*2),
 		pool: sync.Pool{
 			New: func() interface{} {
-				return make([]string, 0, 16)
+				row := make(csvRow, 0, 16)
+				return &row
 			},
 		},
 	}
@@ -123,7 +126,7 @@ func (fw *CSVWriter) startAsyncFlusher() {
 		ticker := time.NewTicker(fw.flushEvery)
 		defer ticker.Stop()
 
-		buf := make([][]string, 0, fw.batchSize)
+		buf := make([]*csvRow, 0, fw.batchSize)
 
 		for {
 			select {
@@ -152,7 +155,7 @@ func (fw *CSVWriter) startAsyncFlusher() {
 	}()
 }
 
-func (fw *CSVWriter) flushBatch(batch [][]string) {
+func (fw *CSVWriter) flushBatch(batch []*csvRow) {
 	if len(batch) == 0 {
 		return
 	}
@@ -163,11 +166,11 @@ func (fw *CSVWriter) flushBatch(batch [][]string) {
 	defer fw.mu.Unlock()
 
 	for _, row := range batch {
-		if err := fw.writer.Write(row); err != nil && fw.log.OnError != nil {
+		if err := fw.writer.Write([]string(*row)); err != nil && fw.log.OnError != nil {
 			fw.log.OnError(err)
 		}
 
-		row = row[:0]
+		*row = (*row)[:0]
 		fw.pool.Put(row)
 	}
 
@@ -183,8 +186,8 @@ func (fw *CSVWriter) flushBatch(batch [][]string) {
 // ------------------------
 
 func (fw *CSVWriter) WriteRow(row []string) {
-	buf := fw.pool.Get().([]string)
-	buf = append(buf[:0], row...)
+	buf := fw.pool.Get().(*csvRow)
+	*buf = append((*buf)[:0], row...)
 	fw.rows <- buf
 }
 

@@ -53,31 +53,3 @@ func hasGoMod(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "go.mod"))
 	return err == nil
 }
-
-func settingsPathFromDir(dir string) string {
-	root := findModuleRoot(dir)
-	if root == "" {
-		return defaultSettingsPath
-	}
-	return filepath.Join(root, defaultSettingsPath)
-}
-
-func settingsPathFromWD() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return defaultSettingsPath
-	}
-	return settingsPathFromDir(wd)
-}
-
-func settingsPathFromCaller() string {
-	return settingsPathFromDir(callerSettingsDir())
-}
-
-func settingsDirPath() string {
-	return filepath.Dir(resolveSettingsPath())
-}
-
-func settingsFileName() string {
-	return filepath.Base(resolveSettingsPath())
-}

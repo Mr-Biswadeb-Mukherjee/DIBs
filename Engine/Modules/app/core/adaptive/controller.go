@@ -38,12 +38,11 @@ type Decision struct {
 }
 
 type sampleWindow struct {
-	tasks         int64
-	pressureErrs  int64
-	rateLimited   int64
-	limiterErrs   int64
-	latencyNanos  int64
-	completedRuns int64
+	tasks        int64
+	pressureErrs int64
+	rateLimited  int64
+	limiterErrs  int64
+	latencyNanos int64
 }
 
 type Controller struct {

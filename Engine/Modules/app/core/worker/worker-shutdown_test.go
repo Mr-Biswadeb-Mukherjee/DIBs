@@ -11,14 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// longRunningTask waits until its context is cancelled and then returns a sentinel result.
-func longRunningTask(sentinel string) TaskFunc {
-	return func(ctx context.Context) (interface{}, []string, []string, []error) {
-		<-ctx.Done()
-		return sentinel, nil, nil, nil
-	}
-}
-
 // shortTask simply returns immediately.
 func shortTask(v string) TaskFunc {
 	return func(ctx context.Context) (interface{}, []string, []string, []error) {
