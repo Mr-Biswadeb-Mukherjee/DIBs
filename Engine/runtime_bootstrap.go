@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package app
+package engine
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	recon "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon"
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 )
 
 const maxModuleErrorLogs = 25
@@ -157,17 +157,11 @@ func (rt *appRuntime) newModules(
 }
 
 func newReconResolver(cfg Config, dnsLog ModuleLogger) dnsResolver {
-	return recon.New(
-		cfg.UpstreamDNS,
-		cfg.BackupDNS,
-		int(cfg.DNSRetries),
-		int(cfg.DNSTimeoutMS),
-		dnsLog,
-	)
+	return app.NewResolver(cfg, dnsLog)
 }
 
 func loadGeneratedDomains(path string) ([]string, map[string]generatedDomainMeta, error) {
-	scored, err := recon.GenerateScoredDomains(path)
+	scored, err := app.GenerateDomains(path)
 	if err != nil {
 		return nil, nil, err
 	}

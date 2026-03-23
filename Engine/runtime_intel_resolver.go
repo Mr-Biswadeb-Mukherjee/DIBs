@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package app
+package engine
 
 import (
 	"math"
@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	recon "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon"
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
 )
 
@@ -52,7 +51,7 @@ func intelRecordToNDJSON(r intel.Record) intelNDJSONRecord {
 	}
 }
 
-func makeGeneratedDomainIndex(items []recon.GeneratedDomain) ([]string, map[string]generatedDomainMeta) {
+func makeGeneratedDomainIndex(items []GeneratedDomain) ([]string, map[string]generatedDomainMeta) {
 	domains := make([]string, 0, len(items))
 	index := make(map[string]generatedDomainMeta, len(items))
 

@@ -4,46 +4,71 @@
 package app
 
 import (
-	"context"
-	"fmt"
+	"time"
+
+	dns "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/DNS"
+	recon "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon"
+	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
 )
 
-func Run(parentCtx context.Context, deps Dependencies) error {
-	rt, err := newAppRuntime(deps)
-	if err != nil {
-		return err
-	}
-	defer rt.Close()
-
-	domains, generatedMeta, err := loadGeneratedDomains(rt.paths.KeywordsCSV)
-	if err != nil {
-		rt.logs.app.Alert("domain generation failed: %v", err)
-		return fmt.Errorf("error processing Keywords.csv: %w", err)
-	}
-
-	total := int64(len(domains))
-	if total == 0 {
-		rt.startup.Stop()
-		fmt.Println("no domains generated")
-		return nil
-	}
-
-	runner := newScanRunner(rt, total)
-	modules, err := rt.newModules(normalizeContext(parentCtx), generatedMeta, runner.onIntelDone())
-	if err != nil {
-		rt.logs.app.Alert("intel pipeline init failed: %v", err)
-		return fmt.Errorf("error starting dns intel pipeline: %w", err)
-	}
-
-	resolved := runner.run(normalizeContext(parentCtx), domains, modules)
-	rt.finishRun(total, resolved)
-	rt.logs.app.Info("run completed generated=%d resolved=%d", total, resolved)
-	return nil
+type GeneratedDomain struct {
+	Domain      string
+	RiskScore   float64
+	Confidence  string
+	GeneratedBy string
 }
 
-func normalizeContext(parentCtx context.Context) context.Context {
-	if parentCtx != nil {
-		return parentCtx
+func DNSConfig(cfg Config) dns.Config {
+	return dns.Config{
+		Upstream:  cfg.UpstreamDNS,
+		Backup:    cfg.BackupDNS,
+		Retries:   int(cfg.DNSRetries),
+		TimeoutMS: cfg.DNSTimeoutMS,
 	}
-	return context.Background()
+}
+
+func NewResolver(cfg Config, dnsLog ModuleLogger) recon.DNS {
+	dnsCfg := DNSConfig(cfg)
+	return recon.New(
+		dnsCfg.Upstream,
+		dnsCfg.Backup,
+		dnsCfg.Retries,
+		int(dnsCfg.TimeoutMS),
+		dnsLog,
+	)
+}
+
+func GenerateDomains(path string) ([]GeneratedDomain, error) {
+	scored, err := recon.GenerateScoredDomains(path)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GeneratedDomain, 0, len(scored))
+	for _, item := range scored {
+		out = append(out, GeneratedDomain{
+			Domain:      item.Domain,
+			RiskScore:   item.RiskScore,
+			Confidence:  item.Confidence,
+			GeneratedBy: item.GeneratedBy,
+		})
+	}
+	return out, nil
+}
+
+func NewDNSIntelService(dnsTimeoutMS int64) *intel.DNSIntelService {
+	return intel.NewDefaultDNSIntelService(1, DNSIntelLookupTimeout(dnsTimeoutMS))
+}
+
+func DNSIntelLookupTimeout(dnsTimeoutMS int64) time.Duration {
+	if dnsTimeoutMS <= 0 {
+		return 3 * time.Second
+	}
+	timeout := time.Duration(dnsTimeoutMS) * 6 * time.Millisecond
+	if timeout < 2*time.Second {
+		return 2 * time.Second
+	}
+	if timeout > 8*time.Second {
+		return 8 * time.Second
+	}
+	return timeout
 }

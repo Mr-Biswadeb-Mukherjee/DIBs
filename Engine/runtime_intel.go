@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package app
+package engine
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
 )
 
@@ -63,7 +64,7 @@ func newIntelPipeline(
 	ctx, cancel := context.WithCancel(parentCtx)
 	p := &intelPipeline{
 		store:        store,
-		service:      newDNSIntelService(dnsTimeoutMS),
+		service:      app.NewDNSIntelService(dnsTimeoutMS),
 		writer:       writer,
 		domainWriter: domainWriter,
 		generated:    generated,

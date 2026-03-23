@@ -30,6 +30,7 @@ type AdaptiveSnapshot = app.AdaptiveSnapshot
 type AdaptiveDecision = app.AdaptiveDecision
 type AdaptiveController = app.AdaptiveController
 type AdaptiveFactory = app.AdaptiveFactory
+type GeneratedDomain = app.GeneratedDomain
 
 const (
 	Low    = app.Low
