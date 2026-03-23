@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package engine
+package app
 
 import (
 	"context"
 	"time"
 
-	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
-	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/runtime"
+	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/runtime"
 )
 
 type workerPoolFactoryAdapter struct {
@@ -20,7 +19,7 @@ func (a workerPoolFactoryAdapter) NewWorkerPool(
 	conc int,
 	cache runtime.CacheStore,
 ) runtime.WorkerPool {
-	appOpts := &app.WorkerPoolOptions{
+	appOpts := &WorkerPoolOptions{
 		Timeout:         opts.Timeout,
 		MaxRetries:      opts.MaxRetries,
 		AutoScale:       opts.AutoScale,
@@ -29,7 +28,7 @@ func (a workerPoolFactoryAdapter) NewWorkerPool(
 		OnTaskStart:     opts.OnTaskStart,
 	}
 	if opts.OnTaskFinish != nil {
-		appOpts.OnTaskFinish = func(taskID int64, res app.TaskResult) {
+		appOpts.OnTaskFinish = func(taskID int64, res TaskResult) {
 			opts.OnTaskFinish(taskID, runtime.TaskResult{
 				Result:   res.Result,
 				Info:     res.Info,
@@ -54,7 +53,7 @@ func (a workerPoolAdapter) SubmitTask(
 ) (int64, <-chan runtime.TaskResult, error) {
 	id, in, err := a.inner.SubmitTask(func(ctx context.Context) (interface{}, []string, []string, []error) {
 		return f(ctx)
-	}, app.TaskPriority(p), weight)
+	}, TaskPriority(p), weight)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -86,7 +85,7 @@ func (a writerFactoryAdapter) NewNDJSONWriter(
 	path string,
 	opts runtime.WriterOptions,
 ) (runtime.RecordWriter, error) {
-	appOpts := app.WriterOptions{
+	appOpts := WriterOptions{
 		BatchSize:  opts.BatchSize,
 		FlushEvery: opts.FlushEvery,
 	}
@@ -119,8 +118,8 @@ type appCacheStoreAdapter struct {
 	inner runtime.CacheStore
 }
 
-func toAppCacheStore(cache runtime.CacheStore) app.CacheStore {
-	if c, ok := cache.(app.CacheStore); ok {
+func toAppCacheStore(cache runtime.CacheStore) CacheStore {
+	if c, ok := cache.(CacheStore); ok {
 		return c
 	}
 	return appCacheStoreAdapter{inner: cache}

@@ -5,8 +5,6 @@ package recon
 
 import (
 	"context"
-
-	dnsengine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/DNS"
 )
 
 // DNS interface defines only what recon actually uses.
@@ -19,24 +17,8 @@ type Recon struct {
 	DNS DNS
 }
 
-// New builds a DNS engine using only primitive parameters.
-// Logger is optional and injected by app without direct package coupling.
-func New(
-	upstream, backup string,
-	retries int,
-	timeoutMS int,
-	loggers ...dnsengine.ModuleLogger,
-) *Recon {
-	engine := dnsengine.New(dnsengine.Config{
-		Upstream:  upstream,
-		Backup:    backup,
-		Retries:   retries,
-		TimeoutMS: int64(timeoutMS), // FIXED: Cast int → int64
-	}, loggers...)
-
-	return &Recon{
-		DNS: engine, // FIXED: no Engine type required
-	}
+func New(resolver DNS) *Recon {
+	return &Recon{DNS: resolver}
 }
 
 // Resolve uses only the interface, not any concrete type.

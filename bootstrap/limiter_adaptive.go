@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 	adaptive "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/adaptive"
 	ratelimiter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/ratelimiter"
 )
@@ -15,10 +15,10 @@ import (
 type rateLimiterAdapter struct{}
 
 func (rateLimiterAdapter) Init(
-	store engine.EvalStore,
+	store app.EvalStore,
 	window time.Duration,
 	maxHits int64,
-	logger engine.ModuleLogger,
+	logger app.ModuleLogger,
 ) {
 	ratelimiter.Init(store, window, maxHits, logger)
 }
@@ -41,7 +41,7 @@ func (adaptiveFactoryAdapter) NewController(
 	initialRate int64,
 	initialTimeout time.Duration,
 	workers int64,
-) engine.AdaptiveController {
+) app.AdaptiveController {
 	cfg := adaptive.DefaultConfig(initialRate, initialTimeout, workers)
 	return adaptiveControllerAdapter{controller: adaptive.NewController(cfg)}
 }
@@ -62,14 +62,14 @@ func (a adaptiveControllerAdapter) ObserveLimiterError() {
 	a.controller.ObserveLimiterError()
 }
 
-func (a adaptiveControllerAdapter) Evaluate(s engine.AdaptiveSnapshot) engine.AdaptiveDecision {
+func (a adaptiveControllerAdapter) Evaluate(s app.AdaptiveSnapshot) app.AdaptiveDecision {
 	decision := a.controller.Evaluate(adaptive.Snapshot{
 		QueueDepth:     s.QueueDepth,
 		InFlight:       s.InFlight,
 		ActiveWorkers:  s.ActiveWorkers,
 		CompletedDelta: s.CompletedDelta,
 	})
-	return engine.AdaptiveDecision{
+	return app.AdaptiveDecision{
 		RateLimit: decision.RateLimit,
 		Timeout:   decision.Timeout,
 		Cooldown:  decision.Cooldown,

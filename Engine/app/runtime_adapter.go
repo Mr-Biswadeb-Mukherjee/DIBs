@@ -1,25 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package engine
+package app
 
 import (
 	"context"
 
-	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
-	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/runtime"
+	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/runtime"
 )
 
 type appResolverBuilder func(
-	cfg app.Config,
-	dnsLog app.ModuleLogger,
+	cfg Config,
+	dnsLog ModuleLogger,
 ) interface {
 	Resolve(ctx context.Context, domain string) (bool, error)
 }
 
-type appDomainGenerator func(path string) ([]app.GeneratedDomain, error)
+type appDomainGenerator func(path string) ([]GeneratedDomain, error)
 
-type appIntelServiceBuilder func(dnsTimeoutMS int64) app.DNSIntelService
+type appIntelServiceBuilder func(dnsTimeoutMS int64) DNSIntelService
 
 type moduleFactory struct {
 	newResolver     appResolverBuilder
@@ -40,7 +39,7 @@ func newModuleFactory(
 }
 
 func (m moduleFactory) NewResolver(cfg runtime.Config, dnsLog runtime.ModuleLogger) runtime.DNSResolver {
-	appCfg := app.Config{
+	appCfg := Config{
 		UpstreamDNS:  cfg.UpstreamDNS,
 		BackupDNS:    cfg.BackupDNS,
 		DNSRetries:   cfg.DNSRetries,
@@ -68,14 +67,14 @@ func (m moduleFactory) GenerateDomains(path string) ([]runtime.GeneratedDomain, 
 }
 
 func (m moduleFactory) NewDNSIntelService(dnsTimeoutMS int64) runtime.DNSIntelService {
-	return intelServiceAdapter{inner: m.newDNSIntelSVC(dnsTimeoutMS)}
+	return runtimeIntelServiceAdapter{inner: m.newDNSIntelSVC(dnsTimeoutMS)}
 }
 
-type intelServiceAdapter struct {
-	inner app.DNSIntelService
+type runtimeIntelServiceAdapter struct {
+	inner DNSIntelService
 }
 
-func (a intelServiceAdapter) Run(
+func (a runtimeIntelServiceAdapter) Run(
 	ctx context.Context,
 	domains []runtime.IntelDomain,
 ) ([]runtime.IntelRecord, error) {
@@ -83,9 +82,9 @@ func (a intelServiceAdapter) Run(
 		return nil, nil
 	}
 
-	in := make([]app.IntelDomain, 0, len(domains))
+	in := make([]IntelDomain, 0, len(domains))
 	for _, d := range domains {
-		in = append(in, app.IntelDomain{Name: d.Name})
+		in = append(in, IntelDomain{Name: d.Name})
 	}
 
 	records, err := a.inner.Run(ctx, in)

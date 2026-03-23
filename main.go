@@ -4,9 +4,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
-	engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 	bootstrap "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/bootstrap"
 )
 
@@ -16,5 +17,8 @@ func main() {
 		fmt.Println("Error:", err.Error())
 		return
 	}
-	engine.Run(deps)
+	if err := app.Run(context.Background(), deps); err != nil {
+		fmt.Println("Error:", err.Error())
+	}
+	fmt.Println("Shutdown complete.")
 }

@@ -5,11 +5,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	dns "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/DNS"
 	recon "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon"
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/intel"
+	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/runtime"
 )
 
 type GeneratedDomain struct {
@@ -38,6 +40,90 @@ type DNSIntelService interface {
 	Run(ctx context.Context, domains []IntelDomain) ([]IntelRecord, error)
 }
 
+var runtimeRun = func(ctx context.Context, deps runtime.Dependencies) error {
+	return runtime.Run(ctx, deps)
+}
+
+var runtimePrintLine = func(args ...any) {
+	fmt.Println(args...)
+}
+
+func Run(ctx context.Context, deps Dependencies) error {
+	return runtimeRun(normalizeContext(ctx), buildRuntimeDependencies(deps))
+}
+
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
+
+func buildRuntimeDependencies(deps Dependencies) runtime.Dependencies {
+	return runtime.Dependencies{
+		Config:      toRuntimeConfig(deps.Config),
+		Paths:       toRuntimePaths(deps.Paths),
+		Startup:     deps.Startup,
+		Logs:        toRuntimeLogs(deps.Logs),
+		Cache:       deps.Cache,
+		Limiter:     deps.Limiter,
+		InitLimiter: initRuntimeLimiter(deps),
+		WorkerPools: workerPoolFactoryAdapter{inner: deps.WorkerPools},
+		Cooldowns:   cooldownFactoryAdapter{inner: deps.Cooldowns},
+		Adaptive:    adaptiveFactoryAdapter{inner: deps.Adaptive},
+		Writers:     writerFactoryAdapter{inner: deps.Writers},
+		Modules:     newRuntimeModuleFactory(),
+		PrintLine:   runtimePrintLine,
+	}
+}
+
+func toRuntimeConfig(cfg Config) runtime.Config {
+	return runtime.Config{
+		RateLimit:      cfg.RateLimit,
+		TimeoutSeconds: cfg.TimeoutSeconds,
+		MaxRetries:     cfg.MaxRetries,
+		AutoScale:      cfg.AutoScale,
+		UpstreamDNS:    cfg.UpstreamDNS,
+		BackupDNS:      cfg.BackupDNS,
+		DNSRetries:     cfg.DNSRetries,
+		DNSTimeoutMS:   cfg.DNSTimeoutMS,
+	}
+}
+
+func toRuntimePaths(paths Paths) runtime.Paths {
+	return runtime.Paths{
+		KeywordsCSV:     paths.KeywordsCSV,
+		DNSIntelOutput:  paths.DNSIntelOutput,
+		GeneratedOutput: paths.GeneratedOutput,
+	}
+}
+
+func toRuntimeLogs(logs LogSet) runtime.LogSet {
+	return runtime.LogSet{
+		App:         logs.App,
+		DNS:         logs.DNS,
+		RateLimiter: logs.RateLimiter,
+	}
+}
+
+func initRuntimeLimiter(deps Dependencies) runtime.LimiterInitFunc {
+	return func(_ runtime.CacheStore, window time.Duration, maxHits int64, logger runtime.ModuleLogger) {
+		deps.Limiter.Init(deps.Cache, window, maxHits, toAppLogger(logger, deps.Logs.RateLimiter))
+	}
+}
+
+func newRuntimeModuleFactory() runtime.ModuleFactory {
+	return newModuleFactory(
+		func(cfg Config, dnsLog ModuleLogger) interface {
+			Resolve(ctx context.Context, domain string) (bool, error)
+		} {
+			return NewResolver(cfg, dnsLog)
+		},
+		GenerateDomains,
+		NewDNSIntelService,
+	)
+}
+
 func DNSConfig(cfg Config) dns.Config {
 	return dns.Config{
 		Upstream:  cfg.UpstreamDNS,
@@ -49,13 +135,8 @@ func DNSConfig(cfg Config) dns.Config {
 
 func NewResolver(cfg Config, dnsLog ModuleLogger) recon.DNS {
 	dnsCfg := DNSConfig(cfg)
-	return recon.New(
-		dnsCfg.Upstream,
-		dnsCfg.Backup,
-		dnsCfg.Retries,
-		int(dnsCfg.TimeoutMS),
-		dnsLog,
-	)
+	engine := dns.New(dnsCfg, dnsLog)
+	return recon.New(engine)
 }
 
 func GenerateDomains(path string) ([]GeneratedDomain, error) {

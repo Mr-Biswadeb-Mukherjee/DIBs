@@ -22,10 +22,6 @@ func (m *mockDNS) Resolve(ctx context.Context, domain string) (bool, error) {
 	return m.resolveFunc(ctx, domain)
 }
 
-// -------------------------
-// Resolve() Tests
-// -------------------------
-
 func TestResolve_Success(t *testing.T) {
 	mock := &mockDNS{
 		resolveFunc: func(ctx context.Context, domain string) (bool, error) {
@@ -106,12 +102,11 @@ func TestResolve_Timeout(t *testing.T) {
 	}
 }
 
-// -------------------------
-// New() Tests
-// -------------------------
-
 func TestNewRecon(t *testing.T) {
-	r := recon.New("8.8.8.8", "1.1.1.1", 3, 500)
+	resolver := &mockDNS{
+		resolveFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	r := recon.New(resolver)
 	if r == nil {
 		t.Fatalf("expected non-nil Recon instance")
 	}

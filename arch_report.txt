@@ -1,8 +1,7 @@
 
 🏛️  Architectural Analysis Report
 ────────────────────────────────────────
-❌ [HORIZONTAL] Engine → Engine/app
-❌ [HORIZONTAL] Engine/app/Recon → Engine/app/DNS
+✅ No architectural violations detected.
 ────────────────────────────────────────
-📉 Violation Score: 6
-📊 Suggested Coverage Penalty: -3.0%
+📉 Violation Score: 0
+📊 Suggested Coverage Penalty: -0.0%

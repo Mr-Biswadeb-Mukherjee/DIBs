@@ -6,7 +6,7 @@ package bootstrap
 import (
 	"errors"
 
-	engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 	config "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/config"
 	cooldown "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/cooldown"
 	logger "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/logger"
@@ -15,18 +15,18 @@ import (
 
 type cooldownFactoryAdapter struct{}
 
-func (cooldownFactoryAdapter) New() engine.CooldownManager {
+func (cooldownFactoryAdapter) New() app.CooldownManager {
 	return cooldown.NewManager()
 }
 
-func BuildEngineDependencies() (engine.Dependencies, error) {
+func BuildEngineDependencies() (app.Dependencies, error) {
 	paths := loadRuntimePaths()
 	cfg, err := config.LoadOrCreateConfig(paths.settingConf)
 	if err != nil {
-		return engine.Dependencies{}, err
+		return app.Dependencies{}, err
 	}
 
-	logs := engine.LogSet{
+	logs := app.LogSet{
 		App:         logger.NewLoggerInDir("app", paths.logsDir),
 		DNS:         logger.NewLoggerInDir("dns", paths.logsDir),
 		RateLimiter: logger.NewLoggerInDir("ratelimiter", paths.logsDir),
@@ -34,18 +34,18 @@ func BuildEngineDependencies() (engine.Dependencies, error) {
 
 	if err := redis.Init(paths.redisConf); err != nil {
 		closeLogs(logs)
-		return engine.Dependencies{}, err
+		return app.Dependencies{}, err
 	}
 
 	cache := redis.Client()
 	if cache == nil {
 		closeLogs(logs)
 		_ = redis.Close()
-		return engine.Dependencies{}, errors.New("redis client unavailable")
+		return app.Dependencies{}, errors.New("redis client unavailable")
 	}
 
-	return engine.Dependencies{
-		Config: engine.Config{
+	return app.Dependencies{
+		Config: app.Config{
 			RateLimit:      cfg.RateLimit,
 			TimeoutSeconds: cfg.TimeoutSeconds,
 			MaxRetries:     cfg.MaxRetries,
@@ -55,7 +55,7 @@ func BuildEngineDependencies() (engine.Dependencies, error) {
 			DNSRetries:     cfg.DNSRetries,
 			DNSTimeoutMS:   cfg.DNSTimeoutMS,
 		},
-		Paths: engine.Paths{
+		Paths: app.Paths{
 			KeywordsCSV:     paths.keywordsCSV,
 			DNSIntelOutput:  paths.dnsIntelOutput,
 			GeneratedOutput: paths.generatedOutput,
@@ -71,7 +71,7 @@ func BuildEngineDependencies() (engine.Dependencies, error) {
 	}, nil
 }
 
-func closeLogs(logs engine.LogSet) {
+func closeLogs(logs app.LogSet) {
 	_ = logs.App.Close()
 	_ = logs.DNS.Close()
 	_ = logs.RateLimiter.Close()

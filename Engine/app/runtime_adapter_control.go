@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Biswadeb Mukherjee
 
-package engine
+package app
 
 import (
 	"time"
 
-	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
-	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/runtime"
+	runtime "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/runtime"
 )
 
 type cooldownFactoryAdapter struct {
@@ -90,8 +89,8 @@ func (a adaptiveControllerAdapter) Evaluate(snapshot runtime.AdaptiveSnapshot) r
 	}
 }
 
-func toAppLogger(logger runtime.ModuleLogger, fallback app.ModuleLogger) app.ModuleLogger {
-	if lg, ok := logger.(app.ModuleLogger); ok {
+func toAppLogger(logger runtime.ModuleLogger, fallback ModuleLogger) ModuleLogger {
+	if lg, ok := logger.(ModuleLogger); ok {
 		return lg
 	}
 	if fallback != nil {

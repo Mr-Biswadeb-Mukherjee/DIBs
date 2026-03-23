@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	engine "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine"
+	app "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app"
 	filewriter "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/filewriter"
 	wpkg "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/worker"
 )
@@ -19,10 +19,10 @@ type workerPoolAdapter struct {
 }
 
 func (workerPoolFactoryAdapter) NewWorkerPool(
-	opts *engine.WorkerPoolOptions,
+	opts *app.WorkerPoolOptions,
 	conc int,
-	cache engine.CacheStore,
-) engine.WorkerPool {
+	cache app.CacheStore,
+) app.WorkerPool {
 	coreOpts := &wpkg.RunOptions{
 		Timeout:         opts.Timeout,
 		MaxRetries:      opts.MaxRetries,
@@ -35,12 +35,12 @@ func (workerPoolFactoryAdapter) NewWorkerPool(
 	return &workerPoolAdapter{pool: wpkg.NewWorkerPool(coreOpts, conc, cache)}
 }
 
-func mapFinishCallback(fn func(taskID int64, res engine.TaskResult)) func(int64, wpkg.WorkerResult) {
+func mapFinishCallback(fn func(taskID int64, res app.TaskResult)) func(int64, wpkg.WorkerResult) {
 	if fn == nil {
 		return nil
 	}
 	return func(taskID int64, res wpkg.WorkerResult) {
-		fn(taskID, engine.TaskResult{
+		fn(taskID, app.TaskResult{
 			Result:   res.Result,
 			Info:     res.Info,
 			Warnings: res.Warnings,
@@ -50,37 +50,37 @@ func mapFinishCallback(fn func(taskID int64, res engine.TaskResult)) func(int64,
 }
 
 func (w *workerPoolAdapter) SubmitTask(
-	f engine.TaskFunc,
-	p engine.TaskPriority,
+	f app.TaskFunc,
+	p app.TaskPriority,
 	weight int,
-) (int64, <-chan engine.TaskResult, error) {
+) (int64, <-chan app.TaskResult, error) {
 	id, out, err := w.pool.SubmitTask(wpkg.TaskFunc(f), mapPriority(p), weight)
 	if err != nil {
 		return 0, nil, err
 	}
-	resCh := make(chan engine.TaskResult, 1)
+	resCh := make(chan app.TaskResult, 1)
 	go forwardWorkerResult(out, resCh)
 	return id, resCh, nil
 }
 
-func mapPriority(p engine.TaskPriority) wpkg.TaskPriority {
+func mapPriority(p app.TaskPriority) wpkg.TaskPriority {
 	switch p {
-	case engine.High:
+	case app.High:
 		return wpkg.High
-	case engine.Low:
+	case app.Low:
 		return wpkg.Low
 	default:
 		return wpkg.Medium
 	}
 }
 
-func forwardWorkerResult(in <-chan wpkg.WorkerResult, out chan<- engine.TaskResult) {
+func forwardWorkerResult(in <-chan wpkg.WorkerResult, out chan<- app.TaskResult) {
 	defer close(out)
 	res, ok := <-in
 	if !ok {
 		return
 	}
-	out <- engine.TaskResult{
+	out <- app.TaskResult{
 		Result:   res.Result,
 		Info:     res.Info,
 		Warnings: res.Warnings,
@@ -96,8 +96,8 @@ type writerFactoryAdapter struct{}
 
 func (writerFactoryAdapter) NewNDJSONWriter(
 	path string,
-	opts engine.WriterOptions,
-) (engine.RecordWriter, error) {
+	opts app.WriterOptions,
+) (app.RecordWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, err
 	}
