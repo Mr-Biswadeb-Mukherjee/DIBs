@@ -12,11 +12,6 @@ import (
 	"github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/core/config"
 )
 
-// ----------------------------------------------
-// Helper: get defaults indirectly
-// ----------------------------------------------
-// Since defaultConfig is unexported, we obtain the defaults
-// by calling LoadOrCreateConfig() on a new file.
 func getDefaultValues(t *testing.T) config.Config {
 	t.Helper()
 
@@ -30,9 +25,6 @@ func getDefaultValues(t *testing.T) config.Config {
 	return cfg
 }
 
-// ----------------------------------------------
-// Test: LoadOrCreateConfig creates file + loads defaults
-// ----------------------------------------------
 func TestLoadOrCreateConfig_CreatesWhenMissing(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "settings.conf")
@@ -53,9 +45,6 @@ func TestLoadOrCreateConfig_CreatesWhenMissing(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------
-// Test: Parsing existing config with overrides
-// ----------------------------------------------
 func TestLoadOrCreateConfig_ParseOverrides(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "settings.conf")
@@ -130,9 +119,6 @@ timeout_seconds=auto
 	}
 }
 
-// ----------------------------------------------
-// Test: Invalid entries ignored
-// ----------------------------------------------
 func TestParseConfig_IgnoresInvalid(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "invalid.conf")
@@ -157,9 +143,6 @@ junk_key=whatever
 	}
 }
 
-// ----------------------------------------------
-// Test: Boolean parsing
-// ----------------------------------------------
 func TestBoolParsing(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "bool.conf")
@@ -173,7 +156,6 @@ func TestBoolParsing(t *testing.T) {
 		t.Fatalf("expected autoscale=true")
 	}
 
-	// change to false
 	if err := os.WriteFile(cfgPath, []byte("autoscale=false"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -184,9 +166,6 @@ func TestBoolParsing(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------
-// Test: Validate default file content
-// ----------------------------------------------
 func TestDefaultFileContainsAllKeys(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "output.conf")
@@ -220,6 +199,32 @@ func TestDefaultFileContainsAllKeys(t *testing.T) {
 		if !strings.Contains(text, key) {
 			t.Fatalf("missing key in default config: %s", key)
 		}
+	}
+}
+
+func TestLoadOrCreateConfig_AppendsMissingKeys(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "settings.conf")
+	initial := "rate_limit=11\nupstream_dns=8.8.8.8:53\n"
+	if err := os.WriteFile(cfgPath, []byte(initial), 0o644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	cfg, err := config.LoadOrCreateConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.RateLimit != 11 {
+		t.Fatalf("expected rate_limit override, got %d", cfg.RateLimit)
+	}
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "dns_timeout_ms=") {
+		t.Fatalf("expected missing default key to be injected")
 	}
 }
 

@@ -19,7 +19,7 @@ func localCfg() *RedisConfig {
 		Host:         "127.0.0.1",
 		Port:         6379,
 		Username:     "",
-		Password:     "8697575043",
+		Password:     "",
 		DB:           0,
 		MaxRetries:   1,
 		PoolSize:     10,

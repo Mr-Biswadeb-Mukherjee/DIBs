@@ -5,16 +5,39 @@ package redis
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// Test case updated: missing file SHOULD return an error
-func TestLoadConfig_MissingFileReturnsError(t *testing.T) {
-	cfg, err := LoadConfig("nonexistent.yaml")
-	require.Error(t, err)
-	require.Nil(t, cfg)
+func TestLoadConfig_MissingFileCreatesDefaults(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "redis.yaml")
+	cfg, err := LoadConfig(file)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Equal(t, "127.0.0.1", cfg.Host)
+	require.Equal(t, 6379, cfg.Port)
+	require.Equal(t, "", cfg.Password)
+	_, statErr := os.Stat(file)
+	require.NoError(t, statErr)
+}
+
+func TestLoadConfig_AppendsMissingKeys(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "redis.yaml")
+	err := os.WriteFile(file, []byte("host: \"localhost\"\n"), 0o600)
+	require.NoError(t, err)
+
+	cfg, err := LoadConfig(file)
+	require.NoError(t, err)
+	require.Equal(t, "localhost", cfg.Host)
+	require.Equal(t, 6379, cfg.Port)
+
+	data, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "password: \"\"")
+	require.Contains(t, string(data), "dial_timeout:")
+	require.Contains(t, string(data), "health_tick:")
 }
 
 func TestLoadConfig_DefaultTimeoutsApplied(t *testing.T) {
@@ -22,7 +45,7 @@ func TestLoadConfig_DefaultTimeoutsApplied(t *testing.T) {
 	err := os.WriteFile(file, []byte(`
 host: localhost
 port: 6379
-password: "8697575043"
+password: ""
 db: 0
 prefix: test
 `), 0o600)
@@ -45,7 +68,7 @@ func TestLoadConfig_PrefixNormalization(t *testing.T) {
 	err := os.WriteFile(file, []byte(`
 host: localhost
 port: 6379
-password: "8697575043"
+password: ""
 prefix: cache
 `), 0o600)
 	require.NoError(t, err)
@@ -63,7 +86,7 @@ func TestLoadConfig_InvalidHost(t *testing.T) {
 cluster: false
 host: ""
 port: 6379
-password: "8697575043"
+password: ""
 `), 0o600)
 	require.NoError(t, err)
 	defer os.Remove(file)
@@ -77,7 +100,7 @@ func TestLoadConfig_ClusterModeAllowsMissingHost(t *testing.T) {
 	file := "test-cluster.yaml"
 	err := os.WriteFile(file, []byte(`
 cluster: true
-password: "8697575043"
+password: ""
 addrs:
   - "127.0.0.1:7000"
   - "127.0.0.1:7001"

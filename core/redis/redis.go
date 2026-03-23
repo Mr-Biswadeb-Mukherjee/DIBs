@@ -8,60 +8,10 @@ package redis
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/spf13/viper"
 )
-
-//
-// ==========================
-//       CONFIG LOADING
-// ==========================
-//
-
-func LoadConfig(file string) (*RedisConfig, error) {
-	viper.SetConfigFile(file)
-	viper.SetConfigType("yaml")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("warning: cannot read redis config file: %v", err)
-	}
-
-	var cfg RedisConfig
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("redis config parse error: %w", err)
-	}
-
-	if cfg.DialTimeout == 0 {
-		cfg.DialTimeout = 5
-	}
-	if cfg.ReadTimeout == 0 {
-		cfg.ReadTimeout = 5
-	}
-	if cfg.WriteTimeout == 0 {
-		cfg.WriteTimeout = 5
-	}
-	if cfg.HealthTick == 0 {
-		cfg.HealthTick = 10
-	}
-	if cfg.BackoffMax == 0 {
-		cfg.BackoffMax = 20
-	}
-
-	if cfg.Prefix != "" && cfg.Prefix[len(cfg.Prefix)-1] != ':' {
-		cfg.Prefix += ":"
-	}
-
-	if !cfg.Cluster && cfg.Host == "" {
-		return nil, errors.New("invalid redis config: missing host")
-	}
-
-	return &cfg, nil
-}
 
 //
 // ==========================

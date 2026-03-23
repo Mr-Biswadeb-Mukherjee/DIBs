@@ -58,6 +58,9 @@ func LoadOrCreateConfig(path string) (Config, error) {
 		}
 		return defaultConfig, nil
 	}
+	if err := ensureConfigEntries(cleanPath); err != nil {
+		return defaultConfig, err
+	}
 	return parseConfig(cleanPath)
 }
 
