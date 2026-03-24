@@ -27,57 +27,75 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
+
       - name: Dependency check
         run: |
           go mod tidy
           go mod verify
           git diff --exit-code go.mod go.sum
+
       - name: Format check
         run: |
           files=$(gofmt -l main.go Engine core bootstrap scripts)
           [ -z "$files" ] || { echo "::error::Unformatted files"; echo "$files"; exit 1; }
+
       - name: Go vet
         run: go vet ./...
+
       - uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
         with:
           version: latest
           args: --timeout=5m --color=always
-      - name: gosec
+
+      - name: gosec (SARIF)
         uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c
         with:
           args: "-fmt sarif -out gosec.sarif ./..."
 
-      - if: always()
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc
         with:
           sarif_file: gosec.sarif
           category: gosec
+
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc 
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Architecture check
         run: |
           go run scripts/arch_check.go | tee arch_report.txt
           echo "Arch penalty: $(cat arch_score.txt 2>/dev/null || echo 0)%"
+
       - uses: actions/upload-artifact@v4
         with:
           name: arch-report
           path: arch_report.txt
+
       - name: Complexity check
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           violations=$(gocyclo -over ${{ env.CYCLO_THRESHOLD }} main.go Engine core bootstrap scripts)
           [ -z "$violations" ] || { echo "::error::Complexity threshold exceeded"; echo "$violations"; exit 1; }
+
       - name: SLOC check
         run: |
           sudo apt-get update -qq
@@ -99,6 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: quality
+
     services:
       redis:
         image: redis:7-alpine
@@ -108,13 +127,16 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
+
       - name: Configure Redis for CI
         run: |
           cat > Setting/redis.yaml <<'YAML'
@@ -135,27 +157,33 @@ jobs:
           health_tick: 10
           backoff_max: 20
           YAML
+
       - name: Run tests
         run: go test ./... -v -race -count=1 2>&1 | tee test_output.txt
+
       - name: Generate coverage
         run: |
           go test ./... -coverpkg=./... -coverprofile=coverage.out -count=1
           go tool cover -func=coverage.out | tee coverage_func.txt
+
       - name: Coverage gate
         run: |
           penalty=$(cat arch_score.txt 2>/dev/null || echo 0)
           raw=$(go tool cover -func=coverage.out | awk '/^total:/{gsub("%","",$3); print $3}')
           final=$(awk -v r="$raw" -v p="$penalty" 'BEGIN {printf "%.2f", r-p}')
           gate="PASS"
+
           if awk -v f="$final" -v t="${{ env.COVERAGE_QAWARN }}" 'BEGIN {exit !(f < t)}'; then
             echo "::error::Coverage ${final}% is below ${{ env.COVERAGE_QAWARN }}%"; gate="BLOCKED"
           elif awk -v f="$final" -v t="${{ env.COVERAGE_BUILD }}" 'BEGIN {exit !(f < t)}'; then
-            echo "::error::Coverage ${final}% is below ${{ env.COVERAGE_BUILD }}%; build blocked"; gate="BLOCKED"
+            echo "::error::Coverage ${final}% is below ${{ env.COVERAGE_BUILD }}%"; gate="BLOCKED"
           elif awk -v f="$final" -v t="${{ env.COVERAGE_PASS }}" 'BEGIN {exit !(f < t)}'; then
-            echo "::warning::Coverage ${final}% is below ${{ env.COVERAGE_PASS }}%; build allowed"; gate="WARN"
+            echo "::warning::Coverage ${final}% is below ${{ env.COVERAGE_PASS }}%"; gate="WARN"
           fi
+
           echo "$gate" > coverage_gate.txt
           [ "$gate" != "BLOCKED" ]
+
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -170,6 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [quality, test]
+
     strategy:
       fail-fast: false
       matrix:
@@ -179,13 +208,16 @@ jobs:
           - { goos: windows, goarch: amd64, suffix: ".exe" }
           - { goos: darwin, goarch: amd64, suffix: "" }
           - { goos: darwin, goarch: arm64, suffix: "" }
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
           cache-dependency-path: go.sum
+
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
@@ -195,6 +227,7 @@ jobs:
           mkdir -p dist
           output="${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}"
           go build -trimpath -ldflags="-s -w" -o "dist/${output}" ./main.go
+
       - uses: actions/upload-artifact@v4
         with:
           name: infermal-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -205,23 +238,28 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     needs: [build]
+
     permissions:
       contents: write
+
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: test-results
           path: ci-artifacts/
+
       - name: Enforce PASS-only coverage gate
         run: |
           gate=$(cat ci-artifacts/coverage_gate.txt 2>/dev/null || echo "UNKNOWN")
           [ "$gate" = "PASS" ] || { echo "::error::Release requires PASS coverage gate"; exit 1; }
+
       - uses: actions/download-artifact@v4
         with:
           pattern: infermal-*
           path: dist/
           merge-multiple: true
-      - uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  
+
+      - uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
         with:
           draft: true
           generate_release_notes: true
