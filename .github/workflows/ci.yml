@@ -12,9 +12,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 env:
   GO_VERSION: "1.24"
   COVERAGE_PASS: "95"
@@ -123,6 +120,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: quality
+    permissions:
+      contents: read
 
     services:
       redis:
@@ -204,6 +203,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [quality, test]
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
