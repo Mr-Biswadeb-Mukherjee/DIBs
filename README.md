@@ -11,14 +11,6 @@
 [![Redis](https://img.shields.io/badge/Redis-Required-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Platform](https://img.shields.io/badge/Platform-Linux-FCC624?style=flat-square&logo=linux&logoColor=black)](https://www.kernel.org/)
 
-![Quality Gate](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Mr-Biswadeb-Mukherjee/<repo>/main/badges/quality.json)
-
-![Security](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Mr-Biswadeb-Mukherjee/<repo>/main/badges/security.json)
-
-![Reliability](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Mr-Biswadeb-Mukherjee/<repo>/main/badges/reliability.json)
-
-![Maintainability](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Mr-Biswadeb-Mukherjee/<repo>/main/badges/maintainability.json)
-
 *High-throughput domain permutation, DNS resolution, and behavioral intelligence at scale.*
 
 ---
