@@ -97,7 +97,12 @@ func ensureRedisConfigFile(path string) error {
 }
 
 func writeRedisDefaults(path string) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	cleanPath, err := sanitizeRedisConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
+	file, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -118,7 +123,12 @@ func redisDefaultConfigText() string {
 }
 
 func ensureRedisEntries(path string) error {
-	content, err := os.ReadFile(path)
+	cleanPath, err := sanitizeRedisConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
+	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return err
 	}
@@ -133,7 +143,7 @@ func ensureRedisEntries(path string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return appendRedisEntries(path, missing)
+	return appendRedisEntries(cleanPath, missing)
 }
 
 func redisExistingKeys(content []byte) map[string]struct{} {
@@ -161,7 +171,12 @@ func redisExistingKeys(content []byte) map[string]struct{} {
 }
 
 func appendRedisEntries(path string, entries []redisConfigEntry) error {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	cleanPath, err := sanitizeRedisConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
+	file, err := os.OpenFile(cleanPath, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

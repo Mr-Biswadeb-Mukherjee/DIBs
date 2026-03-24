@@ -70,10 +70,12 @@ func NewWriter(filename string, opts CSVOptions) (*CSVWriter, error) {
 	if opts.Atomic {
 		fw.atomicTemp = filename + ".tmp"
 		if err := fw.openAtomic(); err != nil {
+			cancel()
 			return nil, err
 		}
 	} else {
 		if err := fw.openNormal(); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
@@ -201,6 +203,10 @@ func (fw *CSVWriter) Close() error {
 	if fw.rows == nil {
 		fw.mu.Unlock()
 		return nil
+	}
+	if fw.cancel != nil {
+		fw.cancel()
+		fw.cancel = nil
 	}
 
 	close(fw.rows)

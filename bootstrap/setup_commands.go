@@ -40,10 +40,19 @@ func runSetupCommand(
 	name string,
 	args ...string,
 ) error {
+	if !isAllowedSetupCommand(name) {
+		return fmt.Errorf("unsupported setup command: %s", name)
+	}
+	cmdPath, err := exec.LookPath(name)
+	if err != nil {
+		return fmt.Errorf("setup command %q not found: %w", name, err)
+	}
+
 	cmdCtx, cancel := context.WithTimeout(ctx, setupCmdTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, name, args...)
+	// #nosec G204 -- cmdPath/args are from internal allowlisted setup command definitions.
+	cmd := exec.CommandContext(cmdCtx, cmdPath, args...)
 	if strings.TrimSpace(workdir) != "" {
 		cmd.Dir = workdir
 	}
@@ -56,6 +65,15 @@ func runSetupCommand(
 		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return fmt.Errorf("%s %s failed: %s", name, strings.Join(args, " "), msg)
+}
+
+func isAllowedSetupCommand(name string) bool {
+	switch name {
+	case "go", "sudo", "brew", "winget", "redis-server":
+		return true
+	default:
+		return false
+	}
 }
 
 func installRedisIfMissing(

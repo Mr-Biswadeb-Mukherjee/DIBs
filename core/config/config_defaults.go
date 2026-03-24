@@ -29,7 +29,12 @@ var configEntries = []configEntry{
 }
 
 func ensureConfigEntries(path string) error {
-	content, err := os.ReadFile(path)
+	cleanPath, err := sanitizeConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeConfigPath.
+	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return err
 	}
@@ -44,7 +49,7 @@ func ensureConfigEntries(path string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return appendMissingConfigEntries(path, missing)
+	return appendMissingConfigEntries(cleanPath, missing)
 }
 
 func existingConfigKeys(content []byte) map[string]struct{} {
@@ -65,7 +70,12 @@ func existingConfigKeys(content []byte) map[string]struct{} {
 }
 
 func appendMissingConfigEntries(path string, entries []configEntry) error {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	cleanPath, err := sanitizeConfigPath(path)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeConfigPath.
+	file, err := os.OpenFile(cleanPath, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
