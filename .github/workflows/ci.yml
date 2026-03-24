@@ -63,10 +63,13 @@ jobs:
           version: latest
           args: --timeout=5m --color=always
 
-      - name: gosec (SARIF)
-        uses: securego/gosec@223e19b8856e00f02cc67804499a83f77e208f3c
-        with:
-          args: "-fmt sarif -out gosec.sarif ./..."
+      - name: gosec (report + enforce)
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+          gosec -fmt sarif -out gosec.sarif ./...
+
+          gosec -severity medium ./...
 
       - name: Upload SARIF
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
