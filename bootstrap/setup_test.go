@@ -73,16 +73,26 @@ func TestRedisInstallersAndStartCommands(t *testing.T) {
 	if len(installers) == 0 {
 		t.Fatal("expected at least one installer")
 	}
-	for _, item := range installers {
-		if item.name == "" || item.check == "" || item.install == nil {
-			t.Fatal("installer entry must be fully configured")
-		}
-	}
+	validateInstallerEntries(t, installers)
 
 	startCmds := redisStartCommands()
 	if len(startCmds) == 0 {
 		t.Fatal("expected at least one startup command")
 	}
+	validateStartCommands(t, startCmds)
+}
+
+func validateInstallerEntries(t *testing.T, installers []installer) {
+	t.Helper()
+	for _, item := range installers {
+		if item.name == "" || item.check == "" || item.install == nil {
+			t.Fatal("installer entry must be fully configured")
+		}
+	}
+}
+
+func validateStartCommands(t *testing.T, startCmds []startupCmd) {
+	t.Helper()
 	for _, item := range startCmds {
 		if item.name == "" || item.check == "" || item.cmd == "" {
 			t.Fatal("startup command entry must be fully configured")

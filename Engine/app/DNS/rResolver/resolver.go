@@ -123,74 +123,105 @@ func (r *Resolver) handleQuery(w mdns.ResponseWriter, req *mdns.Msg) {
 // Resolve performs an iterative (recursive) resolution for a single question.
 func (r *Resolver) Resolve(ctx context.Context, qname string, qtype uint16) ([]mdns.RR, error) {
 	name := dnsFqdn(qname)
-	q := new(mdns.Msg)
-	q.Id = 0
-	q.RecursionDesired = false // we do iterative queries ourselves
-	q.Question = []mdns.Question{{Name: name, Qtype: qtype, Qclass: mdns.ClassINET}}
-
-	// Start from root servers
+	q := newIterativeQuery(name, qtype)
 	servers := append([]string{}, r.rootServers...)
-	var lastErr error
 
 	for {
-		// iterate servers list
-		var resp *mdns.Msg
-		for _, srv := range servers {
-			resp, _, lastErr = r.tryQuery(ctx, srv, q)
-			if lastErr == nil && resp != nil {
-				break
-			}
+		resp, err := r.queryServers(ctx, servers, q)
+		if err != nil {
+			return nil, err
 		}
-		if lastErr != nil {
-			return nil, fmt.Errorf("querying servers: %w", lastErr)
+		if answers, ok := r.resolveAnswerSet(ctx, resp, qname, qtype); ok {
+			return answers, nil
 		}
-
-		// If we have an answer, return it (handle CNAME chaining)
-		if len(resp.Answer) > 0 {
-			answers := extractRecords(resp, qname, qtype)
-			// handle CNAME chain -> resolve target if necessary
-			final := make([]mdns.RR, 0, len(answers))
-			for _, a := range answers {
-				final = append(final, a)
-				if a.Header().Rrtype == mdns.TypeCNAME {
-					cname := strings.TrimSuffix(strings.TrimSpace(a.(*mdns.CNAME).Target), ".")
-					if cname != "" && !strings.EqualFold(cname, qname) {
-						// recursively resolve the CNAME target
-						targetAnswers, err := r.Resolve(ctx, cname, qtype)
-						if err == nil {
-							final = append(final, targetAnswers...)
-						}
-					}
-				}
-			}
-			return final, nil
+		servers, err = referralServers(ctx, resp)
+		if err != nil {
+			return nil, err
 		}
-
-		// No direct answers — look for referral in Authority section
-		ns := extractNameservers(resp)
-		if len(ns) == 0 {
-			return nil, errors.New("no answers and no referral")
-		}
-
-		// build new servers list using glue/A records in Additional section or by resolving NS names
-		servers = resolveServersFromMsg(resp, ns)
-		if len(servers) == 0 {
-			// as fallback, resolve NS names via system resolver
-			for _, n := range ns {
-				ips, err := net.DefaultResolver.LookupHost(ctx, n)
-				if err != nil {
-					continue
-				}
-				for _, ip := range ips {
-					servers = append(servers, net.JoinHostPort(ip, "53"))
-				}
-			}
-			if len(servers) == 0 {
-				return nil, errors.New("could not build list of nameserver addresses")
-			}
-		}
-		// loop and query the new set
 	}
+}
+
+func newIterativeQuery(name string, qtype uint16) *mdns.Msg {
+	q := new(mdns.Msg)
+	q.Id = 0
+	q.RecursionDesired = false
+	q.Question = []mdns.Question{{Name: name, Qtype: qtype, Qclass: mdns.ClassINET}}
+	return q
+}
+
+func (r *Resolver) queryServers(ctx context.Context, servers []string, q *mdns.Msg) (*mdns.Msg, error) {
+	var (
+		resp    *mdns.Msg
+		lastErr error
+	)
+	for _, srv := range servers {
+		resp, _, lastErr = r.tryQuery(ctx, srv, q)
+		if lastErr == nil && resp != nil {
+			return resp, nil
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("querying servers: %w", lastErr)
+	}
+	return nil, errors.New("no response from nameservers")
+}
+
+func (r *Resolver) resolveAnswerSet(
+	ctx context.Context,
+	resp *mdns.Msg,
+	qname string,
+	qtype uint16,
+) ([]mdns.RR, bool) {
+	if len(resp.Answer) == 0 {
+		return nil, false
+	}
+	answers := extractRecords(resp, qname, qtype)
+	final := make([]mdns.RR, 0, len(answers))
+	for _, a := range answers {
+		final = append(final, a)
+		if a.Header().Rrtype != mdns.TypeCNAME {
+			continue
+		}
+		cname := strings.TrimSuffix(strings.TrimSpace(a.(*mdns.CNAME).Target), ".")
+		if cname == "" || strings.EqualFold(cname, qname) {
+			continue
+		}
+		targetAnswers, err := r.Resolve(ctx, cname, qtype)
+		if err == nil {
+			final = append(final, targetAnswers...)
+		}
+	}
+	return final, true
+}
+
+func referralServers(ctx context.Context, resp *mdns.Msg) ([]string, error) {
+	ns := extractNameservers(resp)
+	if len(ns) == 0 {
+		return nil, errors.New("no answers and no referral")
+	}
+	servers := resolveServersFromMsg(resp, ns)
+	if len(servers) > 0 {
+		return servers, nil
+	}
+	servers = resolveServersFromSystem(ctx, ns)
+	if len(servers) == 0 {
+		return nil, errors.New("could not build list of nameserver addresses")
+	}
+	return servers, nil
+}
+
+func resolveServersFromSystem(ctx context.Context, ns []string) []string {
+	servers := make([]string, 0, len(ns))
+	for _, n := range ns {
+		ips, err := net.DefaultResolver.LookupHost(ctx, n)
+		if err != nil {
+			continue
+		}
+		for _, ip := range ips {
+			servers = append(servers, net.JoinHostPort(ip, "53"))
+		}
+	}
+	return servers
 }
 
 func (r *Resolver) tryQuery(ctx context.Context, server string, q *mdns.Msg) (*mdns.Msg, string, error) {

@@ -80,81 +80,91 @@ func getParent(path string) string {
 	return strings.Join(parts[:len(parts)-1], "/")
 }
 
+type analysisContext struct {
+	graph   map[string][]string
+	pathMap map[string]string
+	usage   map[string]int
+}
+
 func main() {
 	pkgs, err := runGoList()
 	if err != nil {
 		fmt.Println("❌ go list failed:", err)
 		os.Exit(0)
 	}
+	ctx := buildAnalysisContext(pkgs)
+	violations, score := analyzeGraph(ctx)
+	penalty := printReport(violations, score)
+	_ = writePenaltyFile("arch_score.txt", penalty)
+	os.Exit(0)
+}
 
-	graph := make(map[string][]string)
-	pathMap := make(map[string]string)
-	usage := make(map[string]int)
-
+func buildAnalysisContext(pkgs []Package) analysisContext {
+	ctx := analysisContext{
+		graph:   make(map[string][]string),
+		pathMap: make(map[string]string),
+		usage:   make(map[string]int),
+	}
 	for _, p := range pkgs {
-		rel := normalizePath(p.Dir)
-		graph[p.ImportPath] = p.Imports
-		pathMap[p.ImportPath] = rel
-
+		ctx.pathMap[p.ImportPath] = normalizePath(p.Dir)
+		ctx.graph[p.ImportPath] = p.Imports
 		for _, imp := range p.Imports {
-			usage[imp]++
+			ctx.usage[imp]++
 		}
 	}
+	return ctx
+}
 
+func analyzeGraph(ctx analysisContext) ([]string, int) {
 	var violations []string
 	score := 0
-
-	for pkg, imports := range graph {
-		pathA := pathMap[pkg]
-		layerA := getLayer(pathA)
-		moduleA := getModule(pathA)
-		parentA := getParent(pathA)
-
+	for pkg, imports := range ctx.graph {
+		pathA := ctx.pathMap[pkg]
 		for _, imp := range imports {
-			pathB, ok := pathMap[imp]
+			pathB, ok := ctx.pathMap[imp]
 			if !ok {
-				continue // skip stdlib / external
+				continue
 			}
-
-			layerB := getLayer(pathB)
-			moduleB := getModule(pathB)
-			parentB := getParent(pathB)
-
-			// -----------------------------
-			// RULE 1: Cross-module (same layer, different module)
-			// -----------------------------
-			if layerA == layerB && moduleA != "" && moduleB != "" && moduleA != moduleB {
-				violations = append(violations,
-					fmt.Sprintf("[CROSS] %s → %s", pathA, pathB))
-				score += penaltyCross
-			}
-
-			// -----------------------------
-			// RULE 2: Horizontal (same parent)
-			// -----------------------------
-			if parentA == parentB && pathA != pathB {
-				violations = append(violations,
-					fmt.Sprintf("[HORIZONTAL] %s → %s", pathA, pathB))
-				score += penaltyHorizontal
-
-				// -------------------------
-				// RULE 3: Exclusive usage
-				// -------------------------
-				if usage[imp] > 1 {
-					violations = append(violations,
-						fmt.Sprintf("[RULE3] %s used by %d packages", pathB, usage[imp]))
-					score += penaltyRule3
-				}
-			}
+			v, delta := evaluateRules(pathA, pathB, imp, ctx.usage)
+			violations = append(violations, v...)
+			score += delta
 		}
 	}
+	return violations, score
+}
 
-	// -----------------------------
-	// OUTPUT
-	// -----------------------------
+func evaluateRules(pathA, pathB, imp string, usage map[string]int) ([]string, int) {
+	violations := make([]string, 0, 3)
+	score := 0
+	if isCrossModule(pathA, pathB) {
+		violations = append(violations, fmt.Sprintf("[CROSS] %s → %s", pathA, pathB))
+		score += penaltyCross
+	}
+	if !isHorizontal(pathA, pathB) {
+		return violations, score
+	}
+	violations = append(violations, fmt.Sprintf("[HORIZONTAL] %s → %s", pathA, pathB))
+	score += penaltyHorizontal
+	if usage[imp] > 1 {
+		violations = append(violations, fmt.Sprintf("[RULE3] %s used by %d packages", pathB, usage[imp]))
+		score += penaltyRule3
+	}
+	return violations, score
+}
+
+func isCrossModule(pathA, pathB string) bool {
+	layerA, layerB := getLayer(pathA), getLayer(pathB)
+	moduleA, moduleB := getModule(pathA), getModule(pathB)
+	return layerA == layerB && moduleA != "" && moduleB != "" && moduleA != moduleB
+}
+
+func isHorizontal(pathA, pathB string) bool {
+	return getParent(pathA) == getParent(pathB) && pathA != pathB
+}
+
+func printReport(violations []string, score int) float64 {
 	fmt.Println("\n🏛️  Architectural Analysis Report")
 	fmt.Println("────────────────────────────────────────")
-
 	if len(violations) == 0 {
 		fmt.Println("✅ No architectural violations detected.")
 	} else {
@@ -162,23 +172,22 @@ func main() {
 			fmt.Println("❌", v)
 		}
 	}
-
 	fmt.Println("────────────────────────────────────────")
 	fmt.Printf("📉 Violation Score: %d\n", score)
-
 	penalty := float64(score) * 0.5
 	if penalty > maxPenaltyCap {
 		penalty = maxPenaltyCap
 	}
-
 	fmt.Printf("📊 Suggested Coverage Penalty: -%.1f%%\n", penalty)
+	return penalty
+}
 
-	// Export for CI
-	f, err := os.Create("arch_score.txt")
-	if err == nil {
-		defer f.Close()
-		fmt.Fprintf(f, "%.2f", penalty)
+func writePenaltyFile(path string, penalty float64) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
 	}
-
-	os.Exit(0)
+	defer f.Close()
+	_, err = fmt.Fprintf(f, "%.2f", penalty)
+	return err
 }

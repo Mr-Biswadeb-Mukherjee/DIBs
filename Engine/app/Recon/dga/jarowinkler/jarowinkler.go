@@ -41,58 +41,59 @@ func JaroDistance(s1, s2 string) float64 {
 		return 1.0
 	}
 
-	matchRange := max(len1, len2)/2 - 1
-	if matchRange < 0 {
-		matchRange = 0
-	}
-
-	m1 := make([]bool, len1)
-	m2 := make([]bool, len2)
-
-	var matches []rune
-	var matchCount float64
-
-	// find matches
-	for i := 0; i < len1; i++ {
-		start := max(0, i-matchRange)
-		end := min(len2-1, i+matchRange)
-
-		for j := start; j <= end; j++ {
-			if !m2[j] && r1[i] == r2[j] {
-				m1[i] = true
-				m2[j] = true
-				matches = append(matches, r1[i])
-				matchCount++
-				break
-			}
-		}
-	}
-
+	matchCount, matches, m2 := findMatches(r1, r2)
 	if matchCount == 0 {
 		return 0.0
 	}
 
-	// transpositions
-	var matches2 []rune
-	for j := 0; j < len2; j++ {
-		if m2[j] {
-			matches2 = append(matches2, r2[j])
-		}
-	}
-
-	var transpositions float64
-	for i := 0; i < len(matches); i++ {
-		if matches[i] != matches2[i] {
-			transpositions++
-		}
-	}
-	transpositions /= 2.0
+	transpositions := countTranspositions(matches, r2, m2)
 
 	j := (matchCount/float64(len1) +
 		matchCount/float64(len2) +
 		(matchCount-transpositions)/matchCount) / 3.0
 
 	return j
+}
+
+func findMatches(r1, r2 []rune) (float64, []rune, []bool) {
+	matchRange := max(len(r1), len(r2))/2 - 1
+	if matchRange < 0 {
+		matchRange = 0
+	}
+	m2 := make([]bool, len(r2))
+	matches := make([]rune, 0, len(r1))
+	var matchCount float64
+
+	for i := 0; i < len(r1); i++ {
+		start := max(0, i-matchRange)
+		end := min(len(r2)-1, i+matchRange)
+		for j := start; j <= end; j++ {
+			if m2[j] || r1[i] != r2[j] {
+				continue
+			}
+			m2[j] = true
+			matches = append(matches, r1[i])
+			matchCount++
+			break
+		}
+	}
+	return matchCount, matches, m2
+}
+
+func countTranspositions(matches, r2 []rune, m2 []bool) float64 {
+	matches2 := make([]rune, 0, len(matches))
+	for j := 0; j < len(r2); j++ {
+		if m2[j] {
+			matches2 = append(matches2, r2[j])
+		}
+	}
+	var transpositions float64
+	for i := 0; i < len(matches); i++ {
+		if matches[i] != matches2[i] {
+			transpositions++
+		}
+	}
+	return transpositions / 2.0
 }
 
 // -------------------------------------------------------------

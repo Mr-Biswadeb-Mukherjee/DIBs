@@ -141,29 +141,25 @@ func applyConfigLine(cfg *Config, line string) {
 }
 
 func applyConfigValue(cfg *Config, key, value string) {
-	switch key {
-	case "rate_limit":
-		cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit)
-	case "cooldown_after":
-		cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter)
-	case "cooldown_duration":
-		cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration)
-	case "timeout_seconds":
-		cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds)
-	case "max_retries":
-		cfg.MaxRetries, _ = strconv.Atoi(value)
-	case "autoscale":
-		cfg.AutoScale = (value == "true")
-	case "upstream_dns":
-		cfg.UpstreamDNS = value
-	case "backup_dns":
-		cfg.BackupDNS = value
-	case "dns_retries":
-		cfg.DNSRetries, _ = strconv.Atoi(value)
-	case "dns_timeout_ms":
+	if setter, ok := configSetters[key]; ok {
+		setter(cfg, value)
+	}
+}
+
+var configSetters = map[string]func(*Config, string){
+	"rate_limit":        func(cfg *Config, value string) { cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit) },
+	"cooldown_after":    func(cfg *Config, value string) { cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter) },
+	"cooldown_duration": func(cfg *Config, value string) { cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration) },
+	"timeout_seconds":   func(cfg *Config, value string) { cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds) },
+	"max_retries":       func(cfg *Config, value string) { cfg.MaxRetries, _ = strconv.Atoi(value) },
+	"autoscale":         func(cfg *Config, value string) { cfg.AutoScale = (value == "true") },
+	"upstream_dns":      func(cfg *Config, value string) { cfg.UpstreamDNS = value },
+	"backup_dns":        func(cfg *Config, value string) { cfg.BackupDNS = value },
+	"dns_retries":       func(cfg *Config, value string) { cfg.DNSRetries, _ = strconv.Atoi(value) },
+	"dns_timeout_ms": func(cfg *Config, value string) {
 		ms, _ := strconv.Atoi(value)
 		cfg.DNSTimeoutMS = int64(ms)
-	}
+	},
 }
 
 func sanitizeConfigPath(path string) (string, error) {

@@ -101,45 +101,62 @@ func (r *StubResolver) resolveOnce(ctx context.Context, fqdn string, qtype uint1
 // ---------------------------------------------------------
 
 func (r *StubResolver) Resolve(ctx context.Context, domain string) (bool, error) {
-	if domain == "" {
-		return false, errors.New("stubresolver: empty domain")
-	}
-	if r.Upstream == "" {
-		return false, errors.New("stubresolver: upstream not configured")
-	}
-	if r.Retries <= 0 {
-		return false, errors.New("stubresolver: retries not set")
-	}
-	if r.Timeout <= 0 {
-		return false, errors.New("stubresolver: timeout not set")
+	if err := r.validateResolveInput(domain); err != nil {
+		return false, err
 	}
 
 	fqdn := dns.Fqdn(domain)
-	qtypes := []uint16{dns.TypeA, dns.TypeAAAA}
-
-	for _, qtype := range qtypes {
-
-		for attempt := 0; attempt < r.Retries; attempt++ {
-
-			// Per-attempt context
-			attemptCtx, cancel := context.WithTimeout(ctx, r.Timeout)
-			resp, err := r.resolveOnce(attemptCtx, fqdn, qtype)
-			cancel()
-
-			if err == nil && resp != nil && len(resp.Answer) > 0 {
-				return true, nil
-			}
-
-			// context-aware delay
-			if r.Delay > 0 {
-				select {
-				case <-ctx.Done():
-					return false, ctx.Err()
-				case <-time.After(r.Delay):
-				}
-			}
+	for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA} {
+		found, err := r.resolveRecordType(ctx, fqdn, qtype)
+		if found || err != nil {
+			return found, err
 		}
 	}
 
 	return false, nil
+}
+
+func (r *StubResolver) validateResolveInput(domain string) error {
+	switch {
+	case domain == "":
+		return errors.New("stubresolver: empty domain")
+	case r.Upstream == "":
+		return errors.New("stubresolver: upstream not configured")
+	case r.Retries <= 0:
+		return errors.New("stubresolver: retries not set")
+	case r.Timeout <= 0:
+		return errors.New("stubresolver: timeout not set")
+	default:
+		return nil
+	}
+}
+
+func (r *StubResolver) resolveRecordType(ctx context.Context, fqdn string, qtype uint16) (bool, error) {
+	for attempt := 0; attempt < r.Retries; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, r.Timeout)
+		resp, err := r.resolveOnce(attemptCtx, fqdn, qtype)
+		cancel()
+
+		if err == nil && resp != nil && len(resp.Answer) > 0 {
+			return true, nil
+		}
+		if err := waitRetryDelay(ctx, r.Delay); err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+func waitRetryDelay(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

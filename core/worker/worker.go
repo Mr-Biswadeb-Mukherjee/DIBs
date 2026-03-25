@@ -21,46 +21,8 @@ import (
 // Note: third parameter name changed from '_' -> rdb so we can store the
 // injected RedisStore in the WorkerPool. Type/signature otherwise unchanged.
 func NewWorkerPool(opts *RunOptions, conc int, rdb RedisStore) *WorkerPool {
-	if opts == nil {
-		opts = &RunOptions{}
-	}
-	if opts.Timeout <= 0 {
-		opts.Timeout = DefaultTimeout
-	}
-	if opts.EvalInterval <= 0 {
-		opts.EvalInterval = DefaultEvalInterval
-	}
-	if opts.ScaleUpThreshold <= 0 {
-		opts.ScaleUpThreshold = DefaultScaleUp
-	}
-	if opts.ScaleDownThreshold <= 0 {
-		opts.ScaleDownThreshold = DefaultScaleDown
-	}
-	if opts.IdleGracePeriod <= 0 {
-		opts.IdleGracePeriod = DefaultIdleGrace
-	}
-	if opts.MinWorkers < 1 {
-		opts.MinWorkers = 1
-	}
-
-	// dedupe TTL default: twice the timeout if not set
-	if opts.DedupeTTL <= 0 {
-		opts.DedupeTTL = opts.Timeout * 2
-	}
-
-	if conc <= 0 {
-		conc = runtime.NumCPU()
-	}
-
-	if opts.MaxWorkers <= 0 {
-		opts.MaxWorkers = conc * 2
-	}
-	if conc < opts.MinWorkers {
-		conc = opts.MinWorkers
-	}
-	if conc > opts.MaxWorkers {
-		conc = opts.MaxWorkers
-	}
+	opts = normalizeRunOptions(opts)
+	conc = normalizeConcurrency(opts, conc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wp := &WorkerPool{
@@ -72,7 +34,6 @@ func NewWorkerPool(opts *RunOptions, conc int, rdb RedisStore) *WorkerPool {
 		redis:       rdb, // store injected Redis instance (may be nil)
 	}
 
-	// initialize workers
 	for i := 0; i < conc; i++ {
 		wp.addWorker()
 	}
@@ -83,6 +44,38 @@ func NewWorkerPool(opts *RunOptions, conc int, rdb RedisStore) *WorkerPool {
 	}
 
 	return wp
+}
+
+func normalizeRunOptions(opts *RunOptions) *RunOptions {
+	if opts == nil {
+		opts = &RunOptions{}
+	}
+	applyDurationDefault(&opts.Timeout, DefaultTimeout)
+	applyDurationDefault(&opts.EvalInterval, DefaultEvalInterval)
+	applyFloatDefault(&opts.ScaleUpThreshold, DefaultScaleUp)
+	applyFloatDefault(&opts.ScaleDownThreshold, DefaultScaleDown)
+	applyDurationDefault(&opts.IdleGracePeriod, DefaultIdleGrace)
+	applyIntMin(&opts.MinWorkers, 1)
+	if opts.DedupeTTL <= 0 {
+		opts.DedupeTTL = opts.Timeout * 2
+	}
+	return opts
+}
+
+func normalizeConcurrency(opts *RunOptions, conc int) int {
+	if conc <= 0 {
+		conc = runtime.NumCPU()
+	}
+	if opts.MaxWorkers <= 0 {
+		opts.MaxWorkers = conc * 2
+	}
+	if conc < opts.MinWorkers {
+		conc = opts.MinWorkers
+	}
+	if conc > opts.MaxWorkers {
+		conc = opts.MaxWorkers
+	}
+	return conc
 }
 
 func (wp *WorkerPool) SubmitTask(f TaskFunc, p TaskPriority, weight int) (int64, <-chan WorkerResult, error) {

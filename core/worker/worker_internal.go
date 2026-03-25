@@ -10,71 +10,91 @@ import (
 )
 
 func (wp *WorkerPool) exec(w *workerInfo, t *Task) {
-	// update load
-	w.mu.Lock()
-	w.Load += t.Weight
-	w.mu.Unlock()
+	updateWorkerLoad(w, t.Weight)
+	defer wp.cleanupTaskState(w, t)
 
-	defer func() {
-		w.mu.Lock()
-		w.Load -= t.Weight
-		if w.Load < 0 {
-			w.Load = 0
-		}
-		w.mu.Unlock()
-
-		// clear dedupe entry
-		if t.Dedupe != "" {
-			wp.mu.Lock()
-			// only delete if the stored id matches (defensive)
-			if e, ok := wp.inflight[t.Dedupe]; ok && e.id == t.ID {
-				delete(wp.inflight, t.Dedupe)
-			}
-			wp.mu.Unlock()
-
-			// Best-effort Redis cleanup: shrink TTL instead of DEL.
-			if wp.redis != nil {
-				dedupeKey := fmt.Sprintf("inflight:%s", t.Dedupe)
-				go func(dk string) {
-					ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-					// set a tiny TTL (1 second) so Redis expires it almost immediately
-					_ = wp.redis.SetValue(ctx, dk, "", 1*time.Second)
-					cancel()
-				}(dedupeKey)
-			}
-		}
-	}()
-
-	// callback: start
 	if wp.options.OnTaskStart != nil {
 		wp.options.OnTaskStart(t.ID)
 	}
 
-	// run with retries + timeout (executeWithRetries is in worker_utils.go)
 	res := executeWithRetries(wp.ctx, t, retryConfig{
 		MaxRetries: wp.options.MaxRetries,
 		Timeout:    wp.options.Timeout,
 	})
+	wp.logTaskResult(t.ID, res)
+	sendResult(t.ResultCh, res)
+	if wp.options.OnTaskFinish != nil {
+		wp.options.OnTaskFinish(t.ID, res)
+	}
+}
 
-	// log info/warn/errors
+func updateWorkerLoad(w *workerInfo, delta int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.Load += delta
+	if w.Load < 0 {
+		w.Load = 0
+	}
+}
+
+func (wp *WorkerPool) cleanupTaskState(w *workerInfo, t *Task) {
+	updateWorkerLoad(w, -t.Weight)
+	if t.Dedupe == "" {
+		return
+	}
+	wp.clearInflightDedupe(t.Dedupe, t.ID)
+	wp.expireRedisDedupe(t.Dedupe)
+}
+
+func (wp *WorkerPool) clearInflightDedupe(key string, taskID int64) {
+	wp.mu.Lock()
+	if e, ok := wp.inflight[key]; ok && e.id == taskID {
+		delete(wp.inflight, key)
+	}
+	wp.mu.Unlock()
+}
+
+func (wp *WorkerPool) expireRedisDedupe(key string) {
+	if wp.redis == nil {
+		return
+	}
+	dedupeKey := fmt.Sprintf("inflight:%s", key)
+	go func(dk string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		_ = wp.redis.SetValue(ctx, dk, "", time.Second)
+		cancel()
+	}(dedupeKey)
+}
+
+func (wp *WorkerPool) logTaskResult(taskID int64, res WorkerResult) {
 	for _, m := range res.Info {
-		wp.log(fmt.Sprintf("INFO task %d: %s", t.ID, m))
+		wp.log(fmt.Sprintf("INFO task %d: %s", taskID, m))
 	}
 	for _, m := range res.Warnings {
-		wp.log(fmt.Sprintf("WARN task %d: %s", t.ID, m))
+		wp.log(fmt.Sprintf("WARN task %d: %s", taskID, m))
 	}
 	for _, e := range res.Errors {
 		if e != nil {
-			wp.log(fmt.Sprintf("ERROR task %d: %v", t.ID, e))
+			wp.log(fmt.Sprintf("ERROR task %d: %v", taskID, e))
 		}
 	}
+}
 
-	// deliver result non-blocking
-	sendResult(t.ResultCh, res)
+func applyDurationDefault(target *time.Duration, fallback time.Duration) {
+	if *target <= 0 {
+		*target = fallback
+	}
+}
 
-	// callback: finish
-	if wp.options.OnTaskFinish != nil {
-		wp.options.OnTaskFinish(t.ID, res)
+func applyFloatDefault(target *float64, fallback float64) {
+	if *target <= 0 {
+		*target = fallback
+	}
+}
+
+func applyIntMin(target *int, min int) {
+	if *target < min {
+		*target = min
 	}
 }
 

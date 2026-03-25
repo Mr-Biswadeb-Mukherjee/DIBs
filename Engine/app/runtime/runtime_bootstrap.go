@@ -72,34 +72,41 @@ func newAppRuntime(deps Dependencies) (*appRuntime, error) {
 }
 
 func validateDependencies(deps Dependencies) error {
-	switch {
-	case deps.Startup == nil:
-		return errors.New("app startup dependency is required")
-	case deps.Logs.App == nil || deps.Logs.DNS == nil || deps.Logs.RateLimiter == nil:
-		return errors.New("app loggers are required")
-	case deps.Cache == nil:
-		return errors.New("app cache dependency is required")
-	case deps.Limiter == nil:
-		return errors.New("app limiter dependency is required")
-	case deps.InitLimiter == nil:
-		return errors.New("app limiter init dependency is required")
-	case deps.WorkerPools == nil:
-		return errors.New("app worker pool factory is required")
-	case deps.Cooldowns == nil:
-		return errors.New("app cooldown factory is required")
-	case deps.Adaptive == nil:
-		return errors.New("app adaptive factory is required")
-	case deps.Writers == nil:
-		return errors.New("app writer factory is required")
-	case deps.Modules == nil:
-		return errors.New("app module factory is required")
-	case deps.Paths.KeywordsCSV == "":
-		return errors.New("keywords path is required")
-	case deps.Paths.DNSIntelOutput == "" || deps.Paths.GeneratedOutput == "":
-		return errors.New("output paths are required")
-	default:
-		return nil
+	for _, check := range dependencyChecks {
+		if check.ok(deps) {
+			continue
+		}
+		return errors.New(check.err)
 	}
+	return nil
+}
+
+type dependencyCheck struct {
+	ok  func(Dependencies) bool
+	err string
+}
+
+var dependencyChecks = []dependencyCheck{
+	{ok: func(d Dependencies) bool { return d.Startup != nil }, err: "app startup dependency is required"},
+	{ok: hasAppLoggers, err: "app loggers are required"},
+	{ok: func(d Dependencies) bool { return d.Cache != nil }, err: "app cache dependency is required"},
+	{ok: func(d Dependencies) bool { return d.Limiter != nil }, err: "app limiter dependency is required"},
+	{ok: func(d Dependencies) bool { return d.InitLimiter != nil }, err: "app limiter init dependency is required"},
+	{ok: func(d Dependencies) bool { return d.WorkerPools != nil }, err: "app worker pool factory is required"},
+	{ok: func(d Dependencies) bool { return d.Cooldowns != nil }, err: "app cooldown factory is required"},
+	{ok: func(d Dependencies) bool { return d.Adaptive != nil }, err: "app adaptive factory is required"},
+	{ok: func(d Dependencies) bool { return d.Writers != nil }, err: "app writer factory is required"},
+	{ok: func(d Dependencies) bool { return d.Modules != nil }, err: "app module factory is required"},
+	{ok: func(d Dependencies) bool { return d.Paths.KeywordsCSV != "" }, err: "keywords path is required"},
+	{ok: hasOutputPaths, err: "output paths are required"},
+}
+
+func hasAppLoggers(deps Dependencies) bool {
+	return deps.Logs.App != nil && deps.Logs.DNS != nil && deps.Logs.RateLimiter != nil
+}
+
+func hasOutputPaths(deps Dependencies) bool {
+	return deps.Paths.DNSIntelOutput != "" && deps.Paths.GeneratedOutput != ""
 }
 
 func newModuleErrorLogger(appLog ModuleLogger) moduleErrorLogger {

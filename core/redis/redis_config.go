@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -37,24 +38,7 @@ var redisDefaultConfig = RedisConfig{
 	BackoffMax:   20,
 }
 
-var redisEntries = []redisConfigEntry{
-	{key: "host", value: "\"127.0.0.1\""},
-	{key: "port", value: "6379"},
-	{key: "username", value: "\"\""},
-	{key: "password", value: "\"\""},
-	{key: "db", value: "0"},
-	{key: "max_retries", value: "3"},
-	{key: "pool_size", value: "20"},
-	{key: "min_idle_conns", value: "5"},
-	{key: "cluster", value: "false"},
-	{key: "addrs", value: "[]"},
-	{key: "prefix", value: "\"\""},
-	{key: "dial_timeout", value: "5"},
-	{key: "read_timeout", value: "5"},
-	{key: "write_timeout", value: "5"},
-	{key: "health_tick", value: "10"},
-	{key: "backoff_max", value: "20"},
-}
+var redisEntries = buildRedisEntries(redisDefaultConfig)
 
 func LoadConfig(file string) (*RedisConfig, error) {
 	cleanPath, err := sanitizeRedisConfigPath(file)
@@ -97,38 +81,11 @@ func ensureRedisConfigFile(path string) error {
 }
 
 func writeRedisDefaults(path string) error {
-	cleanPath, err := sanitizeRedisConfigPath(path)
-	if err != nil {
-		return err
-	}
-	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
-	file, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.WriteString(redisDefaultConfigText())
-	return err
-}
-
-func redisDefaultConfigText() string {
-	var b strings.Builder
-	for _, entry := range redisEntries {
-		b.WriteString(entry.key)
-		b.WriteString(": ")
-		b.WriteString(entry.value)
-		b.WriteString("\n")
-	}
-	return b.String()
+	return writeRedisEntries(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, "", redisEntries)
 }
 
 func ensureRedisEntries(path string) error {
-	cleanPath, err := sanitizeRedisConfigPath(path)
-	if err != nil {
-		return err
-	}
-	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
-	content, err := os.ReadFile(cleanPath)
+	content, err := readRedisConfigContent(path)
 	if err != nil {
 		return err
 	}
@@ -143,7 +100,7 @@ func ensureRedisEntries(path string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return appendRedisEntries(cleanPath, missing)
+	return appendRedisEntries(path, missing)
 }
 
 func redisExistingKeys(content []byte) map[string]struct{} {
@@ -171,27 +128,48 @@ func redisExistingKeys(content []byte) map[string]struct{} {
 }
 
 func appendRedisEntries(path string, entries []redisConfigEntry) error {
+	return writeRedisEntries(path, os.O_APPEND|os.O_WRONLY, "\n# Auto-injected defaults\n", entries)
+}
+
+func writeRedisEntries(
+	path string,
+	flags int,
+	header string,
+	entries []redisConfigEntry,
+) error {
 	cleanPath, err := sanitizeRedisConfigPath(path)
 	if err != nil {
 		return err
 	}
 	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
-	file, err := os.OpenFile(cleanPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(cleanPath, flags, 0o600)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+	_, err = file.WriteString(renderRedisEntries(header, entries))
+	return err
+}
 
+func readRedisConfigContent(path string) ([]byte, error) {
+	cleanPath, err := sanitizeRedisConfigPath(path)
+	if err != nil {
+		return nil, err
+	}
+	// #nosec G304 -- cleanPath is normalized and validated by sanitizeRedisConfigPath.
+	return os.ReadFile(cleanPath)
+}
+
+func renderRedisEntries(header string, entries []redisConfigEntry) string {
 	var b strings.Builder
-	b.WriteString("\n# Auto-injected defaults\n")
+	b.WriteString(header)
 	for _, entry := range entries {
 		b.WriteString(entry.key)
 		b.WriteString(": ")
 		b.WriteString(entry.value)
 		b.WriteString("\n")
 	}
-	_, err = file.WriteString(b.String())
-	return err
+	return b.String()
 }
 
 func sanitizeRedisConfigPath(path string) (string, error) {
@@ -207,34 +185,63 @@ func sanitizeRedisConfigPath(path string) (string, error) {
 }
 
 func normalizeRedisConfig(cfg *RedisConfig) {
-	if cfg.Port == 0 {
-		cfg.Port = redisDefaultConfig.Port
+	applyRedisIntDefaults(
+		intDefault{target: &cfg.Port, fallback: redisDefaultConfig.Port},
+		intDefault{target: &cfg.MaxRetries, fallback: redisDefaultConfig.MaxRetries},
+		intDefault{target: &cfg.PoolSize, fallback: redisDefaultConfig.PoolSize},
+		intDefault{target: &cfg.MinIdleConns, fallback: redisDefaultConfig.MinIdleConns},
+		intDefault{target: &cfg.DialTimeout, fallback: redisDefaultConfig.DialTimeout},
+		intDefault{target: &cfg.ReadTimeout, fallback: redisDefaultConfig.ReadTimeout},
+		intDefault{target: &cfg.WriteTimeout, fallback: redisDefaultConfig.WriteTimeout},
+		intDefault{target: &cfg.HealthTick, fallback: redisDefaultConfig.HealthTick},
+		intDefault{target: &cfg.BackoffMax, fallback: redisDefaultConfig.BackoffMax},
+	)
+	if strings.HasSuffix(cfg.Prefix, ":") || cfg.Prefix == "" {
+		return
 	}
-	if cfg.MaxRetries == 0 {
-		cfg.MaxRetries = redisDefaultConfig.MaxRetries
+	cfg.Prefix += ":"
+}
+
+type intDefault struct {
+	target   *int
+	fallback int
+}
+
+func applyRedisIntDefaults(defaults ...intDefault) {
+	for _, item := range defaults {
+		if *item.target == 0 {
+			*item.target = item.fallback
+		}
 	}
-	if cfg.PoolSize == 0 {
-		cfg.PoolSize = redisDefaultConfig.PoolSize
+}
+
+func buildRedisEntries(cfg RedisConfig) []redisConfigEntry {
+	return []redisConfigEntry{
+		redisStringEntry("host", cfg.Host),
+		redisIntEntry("port", cfg.Port),
+		redisStringEntry("username", cfg.Username),
+		redisStringEntry("password", cfg.Password),
+		redisIntEntry("db", cfg.DB),
+		redisIntEntry("max_retries", cfg.MaxRetries),
+		redisIntEntry("pool_size", cfg.PoolSize),
+		redisIntEntry("min_idle_conns", cfg.MinIdleConns),
+		redisBoolEntry("cluster", cfg.Cluster),
+		{key: "addrs", value: "[]"},
+		redisStringEntry("prefix", cfg.Prefix),
+		redisIntEntry("dial_timeout", cfg.DialTimeout),
+		redisIntEntry("read_timeout", cfg.ReadTimeout),
+		redisIntEntry("write_timeout", cfg.WriteTimeout),
+		redisIntEntry("health_tick", cfg.HealthTick),
+		redisIntEntry("backoff_max", cfg.BackoffMax),
 	}
-	if cfg.MinIdleConns == 0 {
-		cfg.MinIdleConns = redisDefaultConfig.MinIdleConns
-	}
-	if cfg.DialTimeout == 0 {
-		cfg.DialTimeout = redisDefaultConfig.DialTimeout
-	}
-	if cfg.ReadTimeout == 0 {
-		cfg.ReadTimeout = redisDefaultConfig.ReadTimeout
-	}
-	if cfg.WriteTimeout == 0 {
-		cfg.WriteTimeout = redisDefaultConfig.WriteTimeout
-	}
-	if cfg.HealthTick == 0 {
-		cfg.HealthTick = redisDefaultConfig.HealthTick
-	}
-	if cfg.BackoffMax == 0 {
-		cfg.BackoffMax = redisDefaultConfig.BackoffMax
-	}
-	if cfg.Prefix != "" && cfg.Prefix[len(cfg.Prefix)-1] != ':' {
-		cfg.Prefix += ":"
-	}
+}
+
+func redisStringEntry(key, value string) redisConfigEntry {
+	return redisConfigEntry{key: key, value: strconv.Quote(value)}
+}
+func redisIntEntry(key string, value int) redisConfigEntry {
+	return redisConfigEntry{key: key, value: strconv.Itoa(value)}
+}
+func redisBoolEntry(key string, value bool) redisConfigEntry {
+	return redisConfigEntry{key: key, value: strconv.FormatBool(value)}
 }

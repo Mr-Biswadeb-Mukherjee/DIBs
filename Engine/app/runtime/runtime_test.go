@@ -59,27 +59,9 @@ func TestRuntimeHelpersBuildSnapshotAndTimeouts(t *testing.T) {
 		active:    &active,
 	}, 1)
 
-	if snapshot.InFlight != 6 || snapshot.QueueDepth != 4 || snapshot.ActiveWorkers != 2 {
-		t.Fatalf("unexpected snapshot: %#v", snapshot)
-	}
-	if snapshot.CompletedDelta != 3 || lastCompleted != 4 {
-		t.Fatalf("unexpected completion tracking: delta=%d last=%d", snapshot.CompletedDelta, lastCompleted)
-	}
-	if got := intelLookupTimeout(0); got != 3*time.Second {
-		t.Fatalf("unexpected default timeout: %s", got)
-	}
-	if got := intelLookupTimeout(100); got != 2*time.Second {
-		t.Fatalf("unexpected min timeout clamp: %s", got)
-	}
-	if got := intelLookupTimeout(400); got != 2400*time.Millisecond {
-		t.Fatalf("unexpected scaled timeout: %s", got)
-	}
-	if got := intelLookupTimeout(2000); got != 8*time.Second {
-		t.Fatalf("unexpected max timeout clamp: %s", got)
-	}
-	if got := ceilSeconds(1500 * time.Millisecond); got != 2 {
-		t.Fatalf("unexpected ceilSeconds result: %d", got)
-	}
+	assertSnapshotStats(t, snapshot, lastCompleted)
+	assertLookupTimeouts(t)
+	assertCeilSeconds(t, 1500*time.Millisecond, 2)
 
 	atomic.StoreInt64(&active, -3)
 	snapshot, _ = buildSnapshot(runtimeCounters{
@@ -89,5 +71,41 @@ func TestRuntimeHelpersBuildSnapshotAndTimeouts(t *testing.T) {
 	}, lastCompleted)
 	if snapshot.ActiveWorkers != 0 {
 		t.Fatalf("expected negative active workers to clamp to zero, got %d", snapshot.ActiveWorkers)
+	}
+}
+
+func assertSnapshotStats(t *testing.T, snapshot AdaptiveSnapshot, lastCompleted int64) {
+	t.Helper()
+	if snapshot.InFlight != 6 || snapshot.QueueDepth != 4 || snapshot.ActiveWorkers != 2 {
+		t.Fatalf("unexpected snapshot: %#v", snapshot)
+	}
+	if snapshot.CompletedDelta != 3 || lastCompleted != 4 {
+		t.Fatalf("unexpected completion tracking: delta=%d last=%d", snapshot.CompletedDelta, lastCompleted)
+	}
+}
+
+func assertLookupTimeouts(t *testing.T) {
+	t.Helper()
+	cases := []struct {
+		active int64
+		want   time.Duration
+		msg    string
+	}{
+		{active: 0, want: 3 * time.Second, msg: "unexpected default timeout"},
+		{active: 100, want: 2 * time.Second, msg: "unexpected min timeout clamp"},
+		{active: 400, want: 2400 * time.Millisecond, msg: "unexpected scaled timeout"},
+		{active: 2000, want: 8 * time.Second, msg: "unexpected max timeout clamp"},
+	}
+	for _, tc := range cases {
+		if got := intelLookupTimeout(tc.active); got != tc.want {
+			t.Fatalf("%s: %s", tc.msg, got)
+		}
+	}
+}
+
+func assertCeilSeconds(t *testing.T, in time.Duration, want int64) {
+	t.Helper()
+	if got := ceilSeconds(in); got != want {
+		t.Fatalf("unexpected ceilSeconds result: %d", got)
 	}
 }
