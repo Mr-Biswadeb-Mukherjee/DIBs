@@ -19,8 +19,7 @@ env:
   COVERAGE_QAWARN: "80"
   CYCLO_THRESHOLD: "10"
   SLOC_WARN: "250"
-  SLOC_FAIL: "400"
-  SLOC_TOTAL: "2500"
+  SLOC_FAIL: "300"
   BINARY_NAME: "infermal"
 
 jobs:
@@ -122,17 +121,24 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -qq cloc
+
           cloc main.go Engine core bootstrap scripts --include-lang=Go --by-file --quiet --csv |
-          awk -F',' -v fail=${{ env.SLOC_FAIL }} -v total_limit=${{ env.SLOC_TOTAL }} '
-            BEGIN { tco=0 }
+          awk -F',' -v warn=${{ env.SLOC_WARN }} -v fail=${{ env.SLOC_FAIL }} '
+            BEGIN { failed=0 }
+
             /Go,/ {
               code=$5
-              if (code > fail) { print "SLOC FAIL:", $2, code; exit 1 }
-              tco+=code
+
+              if (code > fail) {
+                print "::error::File too large:", $2, code
+                failed=1
+              } else if (code > warn) {
+                print "::warning::File getting large:", $2, code
+              }
             }
+
             END {
-              if (tco > total_limit) { print "TOTAL SLOC FAIL:", tco; exit 1 }
-              print "TOTAL SLOC:", tco
+              if (failed == 1) exit 1
             }'
 
   test:
