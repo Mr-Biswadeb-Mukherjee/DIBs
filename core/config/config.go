@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	RateLimit        int
+	RateLimitCeiling int
 	CooldownAfter    int
 	CooldownDuration int
 	TimeoutSeconds   int // worker timeout
@@ -30,6 +31,7 @@ type Config struct {
 var defaultConfig = Config{
 	// Worker / Performance defaults
 	RateLimit:        0, // auto
+	RateLimitCeiling: 160,
 	CooldownAfter:    0, // auto
 	CooldownDuration: 0, // auto
 	TimeoutSeconds:   0, // auto
@@ -84,6 +86,7 @@ func defaultConfigText() string {
 	return fmt.Sprintf(
 		"# Worker / Performance\n"+
 			"rate_limit=%s\n"+
+			"rate_limit_ceiling=%d\n"+
 			"cooldown_after=%s\n"+
 			"cooldown_duration=%s\n"+
 			"timeout_seconds=%s\n"+
@@ -95,6 +98,7 @@ func defaultConfigText() string {
 			"dns_retries=%d\n"+
 			"dns_timeout_ms=%d\n",
 		formatAutoInt(defaultConfig.RateLimit),
+		defaultConfig.RateLimitCeiling,
 		formatAutoInt(defaultConfig.CooldownAfter),
 		formatAutoInt(defaultConfig.CooldownDuration),
 		formatAutoInt(defaultConfig.TimeoutSeconds),
@@ -137,7 +141,9 @@ func applyConfigLine(cfg *Config, line string) {
 	if len(parts) != 2 {
 		return
 	}
-	applyConfigValue(cfg, parts[0], parts[1])
+	key := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+	applyConfigValue(cfg, key, value)
 }
 
 func applyConfigValue(cfg *Config, key, value string) {
@@ -147,7 +153,10 @@ func applyConfigValue(cfg *Config, key, value string) {
 }
 
 var configSetters = map[string]func(*Config, string){
-	"rate_limit":        func(cfg *Config, value string) { cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit) },
+	"rate_limit": func(cfg *Config, value string) { cfg.RateLimit = parseIntOrAuto(value, cfg.RateLimit) },
+	"rate_limit_ceiling": func(cfg *Config, value string) {
+		cfg.RateLimitCeiling = parsePositiveInt(value, cfg.RateLimitCeiling)
+	},
 	"cooldown_after":    func(cfg *Config, value string) { cfg.CooldownAfter = parseIntOrAuto(value, cfg.CooldownAfter) },
 	"cooldown_duration": func(cfg *Config, value string) { cfg.CooldownDuration = parseIntOrAuto(value, cfg.CooldownDuration) },
 	"timeout_seconds":   func(cfg *Config, value string) { cfg.TimeoutSeconds = parseIntOrAuto(value, cfg.TimeoutSeconds) },
@@ -188,6 +197,14 @@ func parseIntOrAuto(value string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func parsePositiveInt(value string, fallback int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
 		return fallback
 	}
 	return parsed

@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -48,14 +49,15 @@ func TestSanitizeKeyword(t *testing.T) {
 
 func TestAppendTLDs(t *testing.T) {
 	lbls := []string{"example", "test"}
-	got := appendTLDs(lbls)
+	tlds := []string{".com", ".net"}
+	got := appendTLDs(lbls, tlds)
 
-	if len(got) != len(lbls)*len(targetTLDs) {
+	if len(got) != len(lbls)*len(tlds) {
 		t.Fatalf("appendTLDs unexpected count: %d", len(got))
 	}
 
 	for _, d := range got {
-		if d[len(d)-3:] != ".in" {
+		if !strings.HasSuffix(d, ".com") && !strings.HasSuffix(d, ".net") {
 			t.Fatalf("appendTLDs incorrect TLD: %s", d)
 		}
 	}
@@ -111,4 +113,95 @@ func TestLoadKeywordsRejectsNonCSVPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected non-csv path to be rejected")
 	}
+}
+
+func TestLoadTargetTLDsDefaultsWhenMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.conf")
+	got := loadTargetTLDs(path)
+
+	if !equalStringSlices(got, defaultTargetTLDs) {
+		t.Fatalf("expected default tlds %v, got %v", defaultTargetTLDs, got)
+	}
+}
+
+func TestLoadTargetTLDsFromConfig(t *testing.T) {
+	path := writeTempSettings(t, "target_tlds=.com, net, .org, .com\n")
+	got := loadTargetTLDs(path)
+	want := []string{".com", ".net", ".org"}
+
+	if !equalStringSlices(got, want) {
+		t.Fatalf("expected tlds %v, got %v", want, got)
+	}
+}
+
+func TestLoadTargetTLDsInvalidConfigFallsBack(t *testing.T) {
+	path := writeTempSettings(t, "target_tlds= , ,\n")
+	got := loadTargetTLDs(path)
+
+	if !equalStringSlices(got, defaultTargetTLDs) {
+		t.Fatalf("expected default tlds %v, got %v", defaultTargetTLDs, got)
+	}
+}
+
+func TestLoadTargetTLDsFromTierConfig(t *testing.T) {
+	content := strings.Join([]string{
+		"target_tlds_india=.in,.co.in",
+		"target_tlds_global=.com,.net,.in",
+		"active_tld_tiers=india,global",
+	}, "\n")
+	path := writeTempSettings(t, content)
+	got := loadTargetTLDs(path)
+	want := []string{".in", ".co.in", ".com", ".net"}
+
+	if !equalStringSlices(got, want) {
+		t.Fatalf("expected tier tlds %v, got %v", want, got)
+	}
+}
+
+func TestLoadTargetTLDsLegacyOverridesTierConfig(t *testing.T) {
+	content := strings.Join([]string{
+		"target_tlds=.org,.io",
+		"target_tlds_india=.in,.co.in",
+		"active_tld_tiers=india",
+	}, "\n")
+	path := writeTempSettings(t, content)
+	got := loadTargetTLDs(path)
+	want := []string{".org", ".io"}
+
+	if !equalStringSlices(got, want) {
+		t.Fatalf("expected legacy tlds %v, got %v", want, got)
+	}
+}
+
+func TestLoadTargetTLDsDefaultTierLists(t *testing.T) {
+	path := writeTempSettings(t, "active_tld_tiers=india,global\n")
+	got := loadTargetTLDs(path)
+	want := append(defaultTierTLDsCopy("india"), defaultTierTLDsCopy("global")...)
+
+	if !equalStringSlices(got, want) {
+		t.Fatalf("expected default tier tlds %v, got %v", want, got)
+	}
+}
+
+func writeTempSettings(t *testing.T, content string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "setting.conf")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write settings: %v", err)
+	}
+	return path
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -127,28 +127,47 @@ func TestSoundexInternal_Padding(t *testing.T) {
 // Public API test
 // -------------------------------------------------------------
 func TestSoundsquat(t *testing.T) {
-	tests := []struct {
-		input string
-		want  []string
-	}{
-		{"Robert", []string{"R163"}},
-		{" robert ", []string{"R163"}},
-		{"", []string{""}},
+	got := Soundsquat("phone")
+	if len(got) == 0 {
+		t.Fatal("Soundsquat should emit phoneme variants")
+	}
+	if !containsString(got, "fone") {
+		t.Fatalf("expected phoneme variant %q in %v", "fone", got)
+	}
+	if containsString(got, "P500") {
+		t.Fatalf("expected label variants, not soundex code: %v", got)
+	}
+}
+
+func TestSoundsquat_EmptyInput(t *testing.T) {
+	got := Soundsquat("  ")
+	if len(got) != 0 {
+		t.Fatalf("expected empty output for empty input, got %v", got)
+	}
+}
+
+func TestSoundsquat_Deduplicates(t *testing.T) {
+	got := Soundsquat("zoo")
+	if len(got) == 0 {
+		t.Fatal("expected non-empty output for zoo")
 	}
 
-	for _, tt := range tests {
-		got := Soundsquat(tt.input)
-
-		if len(got) != len(tt.want) {
-			t.Fatalf("Soundsquat(%q) length mismatch: got %v, want %v", tt.input, got, tt.want)
+	seen := make(map[string]struct{}, len(got))
+	for _, variant := range got {
+		if _, ok := seen[variant]; ok {
+			t.Fatalf("duplicate variant found: %q", variant)
 		}
+		seen[variant] = struct{}{}
+	}
+}
 
-		for i := range got {
-			if got[i] != tt.want[i] {
-				t.Errorf("Soundsquat(%q)[%d] = %q; want %q", tt.input, i, got[i], tt.want[i])
-			}
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
 		}
 	}
+	return false
 }
 
 // -------------------------------------------------------------

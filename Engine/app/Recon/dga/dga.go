@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	bs "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon/dga/bitsquatting"
@@ -19,10 +20,10 @@ import (
 	ts "github.com/Mr-Biswadeb-Mukherjee/Infermal_v2/Engine/app/Recon/dga/typo_squat"
 )
 
-// Default target TLDs
-var targetTLDs = []string{".in"}
-
-const similarityThreshold = 0.10
+const (
+	similarityThreshold = 0.75
+	defaultSettingsPath = "Setting/setting.conf"
+)
 
 // ---------------------------------------------------
 // Sanitizer
@@ -103,10 +104,10 @@ func sanitizeCSVPath(path string) (string, error) {
 // Internal helpers
 // ---------------------------------------------------
 
-func appendTLDs(labels []string) []string {
+func appendTLDs(labels, tlds []string) []string {
 	var out []string
 	for _, lbl := range labels {
-		for _, tld := range targetTLDs {
+		for _, tld := range tlds {
 			out = append(out, lbl+tld)
 		}
 	}
@@ -123,7 +124,7 @@ func filterSimilar(base string, list []string) []string {
 	return out
 }
 
-func generateForBase(base string) []string {
+func generateForBase(base string, tlds []string) []string {
 	rawTypo := ts.TypoSquat(base)
 	rawHomo := hg.Homograph(base)
 	rawBits := bs.Bitsquatting(base)
@@ -131,12 +132,12 @@ func generateForBase(base string) []string {
 	rawSubs := ss1.Subdomainsquat(base)
 	rawSound := ss2.Soundsquat(base)
 
-	typo := filterSimilar(base, appendTLDs(rawTypo))
-	homo := filterSimilar(base, appendTLDs(rawHomo))
-	bits := filterSimilar(base, appendTLDs(rawBits))
-	combo := filterSimilar(base, appendTLDs(rawCombo))
-	subs := filterSimilar(base, appendTLDs(rawSubs))
-	sound := filterSimilar(base, appendTLDs(rawSound))
+	typo := filterSimilar(base, appendTLDs(rawTypo, tlds))
+	homo := filterSimilar(base, appendTLDs(rawHomo, tlds))
+	bits := filterSimilar(base, appendTLDs(rawBits, tlds))
+	combo := filterSimilar(base, appendTLDs(rawCombo, tlds))
+	subs := filterSimilar(base, appendTLDs(rawSubs, tlds))
+	sound := filterSimilar(base, appendTLDs(rawSound, tlds))
 
 	var all []string
 	all = append(all, typo...)
@@ -158,11 +159,55 @@ func GenerateFromCSV(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	tlds := loadTargetTLDs(resolveSettingsPath())
 
 	var all []string
 	for _, base := range keywords {
-		all = append(all, generateForBase(base)...)
+		all = append(all, generateForBase(base, tlds)...)
 	}
 
 	return all, nil
+}
+
+func resolveSettingsPath() string {
+	if root := findModuleRoot(callerSettingsDir()); root != "" {
+		return filepath.Join(root, defaultSettingsPath)
+	}
+
+	wd, err := os.Getwd()
+	if err == nil {
+		if root := findModuleRoot(wd); root != "" {
+			return filepath.Join(root, defaultSettingsPath)
+		}
+	}
+	return defaultSettingsPath
+}
+
+func callerSettingsDir() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	return filepath.Dir(file)
+}
+
+func findModuleRoot(start string) string {
+	dir := start
+	for dir != "" {
+		if hasGoMod(dir) {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+	return ""
+}
+
+func hasGoMod(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "go.mod"))
+	return err == nil
 }

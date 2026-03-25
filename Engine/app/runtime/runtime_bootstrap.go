@@ -142,7 +142,7 @@ func (rt *appRuntime) finishRun(total, resolved int64) {
 }
 
 func (rt *appRuntime) initRateLimiter(total int64, workers int) {
-	initialRate := seedRateLimit(rt.cfg.RateLimit, total, workers)
+	initialRate := seedRateLimit(rt.cfg.RateLimit, total, workers, rt.cfg.RateLimitCeiling)
 	rt.initLimiter(rt.cache, time.Second, initialRate, rt.logs.rateLimiter)
 }
 

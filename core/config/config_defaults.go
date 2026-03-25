@@ -17,6 +17,7 @@ type configEntry struct {
 
 var configEntries = []configEntry{
 	{key: "rate_limit", value: formatAutoInt(defaultConfig.RateLimit)},
+	{key: "rate_limit_ceiling", value: strconv.Itoa(defaultConfig.RateLimitCeiling)},
 	{key: "cooldown_after", value: formatAutoInt(defaultConfig.CooldownAfter)},
 	{key: "cooldown_duration", value: formatAutoInt(defaultConfig.CooldownDuration)},
 	{key: "timeout_seconds", value: formatAutoInt(defaultConfig.TimeoutSeconds)},

@@ -25,6 +25,7 @@ type runtimeLogger interface {
 type runtimeTuner struct {
 	controller   AdaptiveController
 	limiter      RateLimiter
+	rateCap      int64
 	timeoutNanos atomic.Int64
 	logTick      atomic.Int64
 }
@@ -36,12 +37,13 @@ func newRuntimeTuner(
 	factory AdaptiveFactory,
 	limiter RateLimiter,
 ) *runtimeTuner {
-	seedRate := seedRateLimit(cfg.RateLimit, total, workers)
+	seedRate := seedRateLimit(cfg.RateLimit, total, workers, cfg.RateLimitCeiling)
 	seedTimeout := seedTimeoutValue(cfg.TimeoutSeconds, total)
 
 	tuner := &runtimeTuner{
 		controller: factory.NewController(seedRate, seedTimeout, int64(workers)),
 		limiter:    limiter,
+		rateCap:    normalizeRateLimitCap(cfg.RateLimitCeiling),
 	}
 	tuner.timeoutNanos.Store(seedTimeout.Nanoseconds())
 	return tuner
@@ -84,6 +86,7 @@ func (t *runtimeTuner) run(
 			snap, completed := buildSnapshot(counters, lastCompleted)
 			lastCompleted = completed
 			decision := t.controller.Evaluate(snap)
+			decision.RateLimit = clampRateLimit(decision.RateLimit, t.rateCap)
 			t.timeoutNanos.Store(decision.Timeout.Nanoseconds())
 			if err := t.limiter.SetMaxHits(decision.RateLimit); err != nil && log != nil {
 				log.Warning("adaptive ratelimit update failed: %v", err)
@@ -149,19 +152,19 @@ func buildSnapshot(c runtimeCounters, lastCompleted int64) (AdaptiveSnapshot, in
 	}, completed
 }
 
-func seedRateLimit(configRate int, total int64, workers int) int64 {
+func seedRateLimit(configRate int, total int64, workers int, rateLimitCeiling int) int64 {
 	if configRate > 0 {
-		return int64(configRate)
+		return clampRateLimit(int64(configRate), normalizeRateLimitCap(rateLimitCeiling))
 	}
 	base := int64(maxInt(1, workers) * 8)
+	rate := base
 	switch {
 	case total >= 100000:
-		return base * 3
+		rate = base * 3
 	case total >= 30000:
-		return base * 2
-	default:
-		return base
+		rate = base * 2
 	}
+	return clampRateLimit(rate, normalizeRateLimitCap(rateLimitCeiling))
 }
 
 func seedTimeoutValue(configTimeout int, total int64) time.Duration {
@@ -221,4 +224,21 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func normalizeRateLimitCap(rateLimitCeiling int) int64 {
+	if rateLimitCeiling <= 0 {
+		return 0
+	}
+	return int64(rateLimitCeiling)
+}
+
+func clampRateLimit(rate int64, rateCap int64) int64 {
+	if rate < 1 {
+		rate = 1
+	}
+	if rateCap > 0 && rate > rateCap {
+		return rateCap
+	}
+	return rate
 }

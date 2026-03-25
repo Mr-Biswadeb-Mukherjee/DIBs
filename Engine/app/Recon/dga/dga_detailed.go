@@ -34,24 +34,25 @@ func GenerateDetailedFromCSV(path string) ([]GeneratedCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
+	tlds := loadTargetTLDs(resolveSettingsPath())
 
 	byDomain := make(map[string]GeneratedCandidate)
 	for _, base := range keywords {
-		for algorithm, domains := range generateForBaseByAlgorithm(base) {
+		for algorithm, domains := range generateForBaseByAlgorithm(base, tlds) {
 			appendCandidates(byDomain, domains, algorithm)
 		}
 	}
 	return sortedCandidates(byDomain), nil
 }
 
-func generateForBaseByAlgorithm(base string) map[string][]string {
+func generateForBaseByAlgorithm(base string, tlds []string) map[string][]string {
 	out := make(map[string][]string, 6)
-	out[algorithmTypoSquat] = filterSimilar(base, appendTLDs(ts.TypoSquat(base)))
-	out[algorithmHomograph] = filterSimilar(base, appendTLDs(hg.Homograph(base)))
-	out[algorithmBitsquatting] = filterSimilar(base, appendTLDs(bs.Bitsquatting(base)))
-	out[algorithmComboSquat] = filterSimilar(base, appendTLDs(cs.Combosquat(base)))
-	out[algorithmSubdomainSquat] = filterSimilar(base, appendTLDs(ss1.Subdomainsquat(base)))
-	out[algorithmSoundSquat] = filterSimilar(base, appendTLDs(ss2.Soundsquat(base)))
+	out[algorithmTypoSquat] = filterSimilar(base, appendTLDs(ts.TypoSquat(base), tlds))
+	out[algorithmHomograph] = filterSimilar(base, appendTLDs(hg.Homograph(base), tlds))
+	out[algorithmBitsquatting] = filterSimilar(base, appendTLDs(bs.Bitsquatting(base), tlds))
+	out[algorithmComboSquat] = filterSimilar(base, appendTLDs(cs.Combosquat(base), tlds))
+	out[algorithmSubdomainSquat] = filterSimilar(base, appendTLDs(ss1.Subdomainsquat(base), tlds))
+	out[algorithmSoundSquat] = filterSimilar(base, appendTLDs(ss2.Soundsquat(base), tlds))
 	return out
 }
 

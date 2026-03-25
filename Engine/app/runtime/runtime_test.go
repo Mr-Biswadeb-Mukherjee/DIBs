@@ -109,3 +109,17 @@ func assertCeilSeconds(t *testing.T, in time.Duration, want int64) {
 		t.Fatalf("unexpected ceilSeconds result: %d", got)
 	}
 }
+
+func TestSeedRateLimitAppliesCeilingInAutoMode(t *testing.T) {
+	got := seedRateLimit(0, 120000, 12, 160)
+	if got != 160 {
+		t.Fatalf("expected auto seed to clamp at 160, got %d", got)
+	}
+}
+
+func TestSeedRateLimitAppliesCeilingInManualMode(t *testing.T) {
+	got := seedRateLimit(300, 5000, 4, 160)
+	if got != 160 {
+		t.Fatalf("expected manual rate to clamp at 160, got %d", got)
+	}
+}
