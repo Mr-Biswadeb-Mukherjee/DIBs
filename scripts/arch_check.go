@@ -21,6 +21,7 @@ const (
 	penaltyHorizontal = 3
 	penaltyRule3      = 2
 	maxPenaltyCap     = 30.0
+	archScoreFile     = "arch_score.txt"
 )
 
 func runGoList() ([]Package, error) {
@@ -95,7 +96,9 @@ func main() {
 	ctx := buildAnalysisContext(pkgs)
 	violations, score := analyzeGraph(ctx)
 	penalty := printReport(violations, score)
-	_ = writePenaltyFile("arch_score.txt", penalty)
+	if err := writePenaltyFile(penalty); err != nil {
+		fmt.Println("❌ failed to write architecture score:", err)
+	}
 	os.Exit(0)
 }
 
@@ -182,8 +185,8 @@ func printReport(violations []string, score int) float64 {
 	return penalty
 }
 
-func writePenaltyFile(path string, penalty float64) error {
-	f, err := os.Create(path)
+func writePenaltyFile(penalty float64) error {
+	f, err := os.Create(archScoreFile)
 	if err != nil {
 		return err
 	}
