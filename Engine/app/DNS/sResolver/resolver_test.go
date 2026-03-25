@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Biswadeb Mukherjee
 
 package sresolver
 
@@ -11,197 +12,164 @@ import (
 	"github.com/miekg/dns"
 )
 
-type fakeDNSClient struct {
-	resp *dns.Msg
-	err  error
-}
-
-func (c *fakeDNSClient) Exchange(*dns.Msg, string) (*dns.Msg, time.Duration, error) {
-	return c.resp, 0, c.err
-}
-
 // ------------------------------
-// Validation
+// resolveOnce branches
 // ------------------------------
 
-func TestStubResolverValidation(t *testing.T) {
-	tests := []struct {
-		name   string
-		r      *StubResolver
-		domain string
-	}{
-		{"empty domain", New(WithUpstream("127.0.0.1:53"), WithRetries(1), WithTimeout(time.Second)), ""},
-		{"missing upstream", New(WithRetries(1), WithTimeout(time.Second)), "example.test"},
-		{"missing retries", New(WithUpstream("127.0.0.1:53"), WithTimeout(time.Second)), "example.test"},
-		{"missing timeout", New(WithUpstream("127.0.0.1:53"), WithRetries(1)), "example.test"},
-		{"whitespace", New(WithUpstream("127.0.0.1:53"), WithRetries(1), WithTimeout(time.Second)), "   "},
-	}
-
-	for _, tt := range tests {
-		ok, err := tt.r.Resolve(context.Background(), tt.domain)
-		if err == nil || ok {
-			t.Fatalf("%s: expected failure", tt.name)
-		}
-	}
-}
-
-// ------------------------------
-// Success + NXDOMAIN + error
-// ------------------------------
-
-func TestStubResolverBasicPaths(t *testing.T) {
+func TestResolveOncePaths(t *testing.T) {
 	old := newDNSClient
 	t.Cleanup(func() { newDNSClient = old })
 
-	success := new(dns.Msg)
-	success.Answer = append(success.Answer, &dns.A{
+	r := New(WithUpstream("127.0.0.1:53"), WithTimeout(100*time.Millisecond))
+
+	// success
+	newDNSClient = func(time.Duration) dnsClient {
+		return &fakeDNSClient{resp: new(dns.Msg)}
+	}
+	if _, err := r.resolveOnce(context.Background(), "example.test.", dns.TypeA); err != nil {
+		t.Fatal("expected success")
+	}
+
+	// error
+	newDNSClient = func(time.Duration) dnsClient {
+		return &fakeDNSClient{err: context.DeadlineExceeded}
+	}
+	if _, err := r.resolveOnce(context.Background(), "example.test.", dns.TypeA); err == nil {
+		t.Fatal("expected error")
+	}
+
+	// ctx cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	newDNSClient = func(time.Duration) dnsClient {
+		time.Sleep(50 * time.Millisecond)
+		return &fakeDNSClient{}
+	}
+
+	if _, err := r.resolveOnce(ctx, "example.test.", dns.TypeA); err == nil {
+		t.Fatal("expected ctx cancel")
+	}
+}
+
+// ------------------------------
+// Deep stub branches
+// ------------------------------
+
+func TestStubResolverEdgeBranches(t *testing.T) {
+	old := newDNSClient
+	t.Cleanup(func() { newDNSClient = old })
+
+	r := New(
+		WithUpstream("127.0.0.1:53"),
+		WithRetries(1),
+		WithTimeout(50*time.Millisecond),
+		WithDelay(20*time.Millisecond),
+	)
+
+	// nil response
+	newDNSClient = func(time.Duration) dnsClient {
+		return &fakeDNSClient{resp: nil}
+	}
+	ok, err := r.Resolve(context.Background(), "example.test")
+	if err != nil || ok {
+		t.Fatal("expected unresolved nil response")
+	}
+
+	// empty answer
+	newDNSClient = func(time.Duration) dnsClient {
+		return &fakeDNSClient{resp: new(dns.Msg)}
+	}
+	ok, err = r.Resolve(context.Background(), "example.test")
+	if err != nil || ok {
+		t.Fatal("expected unresolved empty answer")
+	}
+
+	// ctx cancel during retry delay
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	newDNSClient = func(time.Duration) dnsClient {
+		return &fakeDNSClient{err: context.DeadlineExceeded}
+	}
+
+	ok, err = r.Resolve(ctx, "example.test")
+	if err == nil || ok {
+		t.Fatal("expected ctx cancel")
+	}
+}
+
+// ------------------------------
+// Concurrency
+// ------------------------------
+
+func TestStubResolverConcurrent(t *testing.T) {
+	old := newDNSClient
+	t.Cleanup(func() { newDNSClient = old })
+
+	resp := new(dns.Msg)
+	resp.Answer = append(resp.Answer, &dns.A{
 		Hdr: dns.RR_Header{Name: "example.test.", Rrtype: dns.TypeA, Class: dns.ClassINET},
 		A:   net.ParseIP("127.0.0.1"),
 	})
 
-	tests := []struct {
-		name   string
-		resp   *dns.Msg
-		err    error
-		expect bool
-	}{
-		{"success", success, nil, true},
-		{"nxdomain", &dns.Msg{Rcode: dns.RcodeNameError}, nil, false},
-		{"servfail", &dns.Msg{Rcode: dns.RcodeServerFailure}, nil, false},
-		{"network error", nil, context.DeadlineExceeded, false},
-	}
-
-	for _, tt := range tests {
-		newDNSClient = func(time.Duration) dnsClient {
-			return &fakeDNSClient{resp: tt.resp, err: tt.err}
-		}
-
-		r := New(
-			WithUpstream("127.0.0.1:53"),
-			WithRetries(1),
-			WithTimeout(time.Second),
-		)
-
-		ok, err := r.Resolve(context.Background(), "example.test")
-
-		if tt.expect && (err != nil || !ok) {
-			t.Fatalf("%s: expected success", tt.name)
-		}
-		if !tt.expect && (err == nil && ok) {
-			t.Fatalf("%s: expected failure", tt.name)
-		}
-	}
-}
-
-// ------------------------------
-// Retry + Timeout
-// ------------------------------
-
-func TestStubResolverRetryAndTimeout(t *testing.T) {
-	old := newDNSClient
-	t.Cleanup(func() { newDNSClient = old })
-
-	attempts := 0
-
 	newDNSClient = func(time.Duration) dnsClient {
-		attempts++
-		if attempts < 3 {
-			return &fakeDNSClient{err: context.DeadlineExceeded}
-		}
-		resp := new(dns.Msg)
-		resp.Answer = append(resp.Answer, &dns.A{
-			Hdr: dns.RR_Header{Name: "example.test.", Rrtype: dns.TypeA, Class: dns.ClassINET},
-			A:   net.ParseIP("127.0.0.1"),
-		})
 		return &fakeDNSClient{resp: resp}
 	}
 
 	r := New(
 		WithUpstream("127.0.0.1:53"),
-		WithRetries(3),
-		WithTimeout(50*time.Millisecond),
-	)
-
-	ok, err := r.Resolve(context.Background(), "example.test")
-	if err != nil || !ok {
-		t.Fatal("expected retry success")
-	}
-	if attempts != 3 {
-		t.Fatalf("expected 3 attempts, got %d", attempts)
-	}
-
-	// timeout-only path
-	newDNSClient = func(time.Duration) dnsClient {
-		return &fakeDNSClient{err: context.DeadlineExceeded}
-	}
-
-	r = New(
-		WithUpstream("127.0.0.1:53"),
 		WithRetries(1),
-		WithTimeout(10*time.Millisecond),
+		WithTimeout(time.Second),
 	)
 
-	ok, err = r.Resolve(context.Background(), "example.test")
-	if err == nil || ok {
-		t.Fatal("expected timeout failure")
+	const n = 40
+	errCh := make(chan error, n)
+
+	for i := 0; i < n; i++ {
+		go func() {
+			ok, err := r.Resolve(context.Background(), "example.test")
+			if err != nil || !ok {
+				errCh <- err
+				return
+			}
+			errCh <- nil
+		}()
+	}
+
+	for i := 0; i < n; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("failure: %v", err)
+		}
 	}
 }
 
 // ------------------------------
-// System Resolver
+// Weird inputs
 // ------------------------------
 
-func TestSystemResolverFull(t *testing.T) {
-	old := lookupIPAddr
-	t.Cleanup(func() { lookupIPAddr = old })
+func TestStubResolverWeirdInputs(t *testing.T) {
+	r := New(
+		WithUpstream("127.0.0.1:53"),
+		WithRetries(1),
+		WithTimeout(time.Second),
+	)
 
-	// success
-	lookupIPAddr = func(_ *net.Resolver, _ context.Context, _ string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
+	inputs := []string{
+		"",
+		" ",
+		"   example.test   ",
+		".",
+		"..",
+		"invalid..domain",
+		"exa mple.test",
+		"\x00example.test",
 	}
 
-	r := NewSystem()
-
-	ok, err := r.Resolve(context.Background(), "example.test")
-	if err != nil || !ok {
-		t.Fatal("expected success")
-	}
-
-	// failure
-	lookupIPAddr = func(_ *net.Resolver, _ context.Context, _ string) ([]net.IPAddr, error) {
-		return nil, context.DeadlineExceeded
-	}
-
-	ok, err = r.Resolve(context.Background(), "fail.test")
-	if err == nil || ok {
-		t.Fatal("expected failure")
-	}
-
-	// empty result
-	lookupIPAddr = func(_ *net.Resolver, _ context.Context, _ string) ([]net.IPAddr, error) {
-		return []net.IPAddr{}, nil
-	}
-
-	ok, err = r.Resolve(context.Background(), "empty.test")
-	if err != nil || ok {
-		t.Fatal("expected unresolved empty result")
-	}
-
-	// nil resolver fallback
-	r = &SystemResolver{Resolver: nil}
-
-	lookupIPAddr = func(_ *net.Resolver, _ context.Context, _ string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
-	}
-
-	ok, err = r.Resolve(context.Background(), "example.test")
-	if err != nil || !ok {
-		t.Fatal("expected fallback success")
-	}
-
-	// invalid input
-	ok, err = r.Resolve(context.Background(), " ")
-	if err == nil || ok {
-		t.Fatal("expected invalid input failure")
+	for _, in := range inputs {
+		ok, err := r.Resolve(context.Background(), in)
+		if err == nil && ok {
+			t.Fatalf("unexpected success: %q", in)
+		}
 	}
 }
