@@ -4,7 +4,7 @@
 
 **Domain Intelligence & DNS Behavior Analysis Framework**
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org/)
 [![Build Status](https://img.shields.io/badge/Build-Passing-2ea44f?style=flat-square&logo=github-actions&logoColor=white)](https://github.com/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=flat-square)](https://github.com/)
@@ -141,8 +141,11 @@ All output is written as **newline-delimited JSON (NDJSON)** for streaming compa
 
 | File | Contents |
 |------|----------|
-| `Output/Generated_Domains.ndjson` | Domain, risk score `[0.05–0.99]`, confidence (`high`/`medium`/`low`), generating algorithms |
+| `Output/Generated_Domain.ndjson` | Generated domains with risk score, confidence, and source algorithm metadata |
+| `Output/Resolved_Domain.ndjson` | Final resolved domains that passed runtime resolution pipeline |
 | `Output/DNS_Intel.ndjson` | A/AAAA/CNAME/NS/MX/TXT records, provider list, UTC timestamp |
+| `Output/Run_Metrics.ndjson` | Run-level duration, totals, QPS, and rate-limit telemetry snapshot |
+| `Output/QPS_History_<timestamp>.ndjson` | Time-series QPS and progress history sampled during execution |
 
 Output integrates directly with SIEM platforms, data pipelines, and visualization tooling.
 
@@ -221,6 +224,17 @@ Infermal API public key: pubkey_ed25519 <token> Infermal_v2
 Infermal API listening on :9090
 ```
 
+Trigger a scan lifecycle via API:
+
+```bash
+BASE="http://localhost:9090"
+PUB_KEY="pubkey_ed25519 <token> Infermal_v2"
+
+curl -s -X POST "$BASE/api/v3/control/start" -H "X-API-Key: $PUB_KEY"
+curl -s "$BASE/api/v3/control/status"        -H "X-API-Key: $PUB_KEY"
+curl -s -X POST "$BASE/api/v3/control/stop"  -H "X-API-Key: $PUB_KEY"
+```
+
 ---
 
 ## API Control Plane
@@ -238,6 +252,7 @@ This avoids production drift by keeping endpoint definitions in a single contrac
 - Server stores an `ed25519` **private key**.
 - Client authenticates using the derived `ed25519` **public key** via header: `X-API-Key`.
 - Public key is printed in server terminal on startup.
+- Public key is not exposed via API endpoints.
 - Any different/invalid key is rejected as unauthenticated (`401`).
 
 Public key format:
@@ -300,7 +315,7 @@ curl -i -X POST "$BASE/api/v3/control/start" -H "X-API-Key: invalid-key"
 
 ## Output Schema
 
-### `Generated_Domains.ndjson`
+### `Generated_Domain.ndjson`
 
 ```json
 {
@@ -308,6 +323,18 @@ curl -i -X POST "$BASE/api/v3/control/start" -H "X-API-Key: invalid-key"
   "risk_score": 0.81,
   "confidence": "high",
   "generated_by": "bitsquatting,typo_squat"
+}
+```
+
+### `Resolved_Domain.ndjson`
+
+```json
+{
+  "domain": "example-resolved.com",
+  "score": 0.64,
+  "confidence": "medium",
+  "generated_by": "typo_squat,bitsquatting",
+  "resolution": "resolved"
 }
 ```
 
