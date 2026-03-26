@@ -15,7 +15,7 @@
 
 ---
 
-[Overview](#overview) · [Disclaimer](#disclaimer) · [Architecture](#architecture) · [Features](#-features) · [Getting Started](#-getting-started) · [Configuration](#-configuration) · [Use Cases](#-use-cases) · [Contributing](#-contributing)
+[Overview](#overview) · [Disclaimer](#disclaimer) · [Architecture](#architecture) · [Features](#-features) · [Getting Started](#-getting-started) · [Configuration](#-configuration) · [API Control Plane](#api-control-plane) · [Use Cases](#-use-cases) · [Contributing](#-contributing)
 
 </div>
 
@@ -102,6 +102,15 @@ The runtime tuner continuously observes DNS latency, error rates, and queue dept
 - **Cooldown** — back-pressure gate triggered on sustained pressure to prevent resolver overload
 
 All tuning decisions are logged with pressure score, in-flight count, and active worker metrics.
+
+### API Control Plane (Port `9090`)
+
+Infermal_v2 now runs behind an API control layer:
+
+- `go run .` starts the API server on `:9090`
+- Scan lifecycle is controlled via API (`start`, `status`, `metrics`, `events`, `stop`)
+- Endpoint contract is loaded from `APIs/Endpoint.ndjson` (single source of truth)
+- Auth is `ed25519` public-key based (`X-API-Key`) with strict constant-time matching
 
 ### Intelligence Extraction
 
@@ -205,11 +214,74 @@ binance
 go run .
 ```
 
-On completion:
+On startup, the server prints the public key for admin distribution:
 
 ```
-✔ Generated domains written to Output/Generated_Domains.ndjson
-✔ DNS intel written to Output/DNS_Intel.ndjson
+Infermal API public key: pubkey_ed25519 <token> Infermal_v2
+Infermal API listening on :9090
+```
+
+---
+
+## API Control Plane
+
+### Endpoint Contract
+
+All API routes and auth requirements are declared in:
+
+- `APIs/Endpoint.ndjson`
+
+This avoids production drift by keeping endpoint definitions in a single contract file.
+
+### Authentication Model
+
+- Server stores an `ed25519` **private key**.
+- Client authenticates using the derived `ed25519` **public key** via header: `X-API-Key`.
+- Public key is printed in server terminal on startup.
+- Any different/invalid key is rejected as unauthenticated (`401`).
+
+Public key format:
+
+- `pubkey_ed25519 <base64-public-key> Infermal_v2`
+
+Private key source priority:
+
+1. `INFERMAL_API_PRIVATE_KEY` (explicit environment override)
+2. `INFERMAL_API_PRIVATE_KEY_PATH` (file path override)
+3. default file path: `Setting/api_private.key`
+
+If no private key exists, Infermal generates one and stores it at the configured path.
+As long as this private key is preserved, restarts keep the same public key.
+If the private key is deleted or replaced, a new public key is derived and previous clients fail authentication.
+
+### Control Endpoints
+
+| Endpoint | Method | Auth |
+|----------|--------|------|
+| `/healthz` | `GET` | No |
+| `/api/v3/control/start` | `POST` | Yes |
+| `/api/v3/control/stop` | `POST` | Yes |
+| `/api/v3/control/status` | `GET` | Yes |
+| `/api/v3/control/metrics` | `GET` | Yes |
+| `/api/v3/control/events.ndjson` | `GET` | Yes |
+
+### Quick Test with curl
+
+```bash
+BASE="http://localhost:9090"
+PUB_KEY="pubkey_ed25519 <token> Infermal_v2"
+
+curl -s "$BASE/healthz"
+curl -s -X POST "$BASE/api/v3/control/start"  -H "X-API-Key: $PUB_KEY"
+curl -s "$BASE/api/v3/control/status"         -H "X-API-Key: $PUB_KEY"
+curl -s "$BASE/api/v3/control/metrics"        -H "X-API-Key: $PUB_KEY"
+curl -s -X POST "$BASE/api/v3/control/stop"   -H "X-API-Key: $PUB_KEY"
+```
+
+Negative test:
+
+```bash
+curl -i -X POST "$BASE/api/v3/control/start" -H "X-API-Key: invalid-key"
 ```
 
 

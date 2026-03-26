@@ -1,0 +1,7 @@
+{"kind":"config","api_key_header":"X-API-Key"}
+{"kind":"route","name":"health","method":"GET","path":"/healthz","auth":false}
+{"kind":"route","name":"control.start","method":"POST","path":"/api/v3/control/start","auth":true}
+{"kind":"route","name":"control.stop","method":"POST","path":"/api/v3/control/stop","auth":true}
+{"kind":"route","name":"control.status","method":"GET","path":"/api/v3/control/status","auth":true}
+{"kind":"route","name":"control.metrics","method":"GET","path":"/api/v3/control/metrics","auth":true}
+{"kind":"route","name":"control.events","method":"GET","path":"/api/v3/control/events.ndjson","auth":true}
