@@ -36,6 +36,21 @@ func (p *intelPipeline) generatedMeta(domain string) generatedDomainMeta {
 	return normalizeGeneratedMeta(meta)
 }
 
+func (p *intelPipeline) markGeneratedDone(domain string) {
+	if p == nil || p.generated == nil {
+		return
+	}
+	domain = normalizeGeneratedDomainName(domain)
+	if domain == "" {
+		return
+	}
+	ioCtx, cancel := context.WithTimeout(p.ctx, generatedStoreIOTime)
+	defer cancel()
+	if err := p.generated.markDone(ioCtx, domain); err != nil && p.logErr != nil {
+		p.logErr("generated-spool-mark-done", domain, err)
+	}
+}
+
 func intelLookupTimeout(dnsTimeoutMS int64) time.Duration {
 	if dnsTimeoutMS <= 0 {
 		return 3 * time.Second

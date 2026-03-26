@@ -21,10 +21,11 @@ type Config struct {
 }
 
 type Paths struct {
-	KeywordsCSV     string
-	DNSIntelOutput  string
-	GeneratedOutput string
-	ResolvedOutput  string
+	KeywordsCSV      string
+	DNSIntelOutput   string
+	GeneratedOutput  string
+	ResolvedOutput   string
+	RunMetricsOutput string
 }
 
 type Dependencies struct {

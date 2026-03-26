@@ -93,10 +93,11 @@ func toRuntimeConfig(cfg Config) runtime.Config {
 
 func toRuntimePaths(paths Paths) runtime.Paths {
 	return runtime.Paths{
-		KeywordsCSV:     paths.KeywordsCSV,
-		DNSIntelOutput:  paths.DNSIntelOutput,
-		GeneratedOutput: paths.GeneratedOutput,
-		ResolvedOutput:  paths.ResolvedOutput,
+		KeywordsCSV:      paths.KeywordsCSV,
+		DNSIntelOutput:   paths.DNSIntelOutput,
+		GeneratedOutput:  paths.GeneratedOutput,
+		ResolvedOutput:   paths.ResolvedOutput,
+		RunMetricsOutput: paths.RunMetricsOutput,
 	}
 }
 

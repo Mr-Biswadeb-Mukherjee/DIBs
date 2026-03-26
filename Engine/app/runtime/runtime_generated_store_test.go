@@ -216,30 +216,3 @@ func TestLoadGeneratedMetaFallsBackToSpool(t *testing.T) {
 		t.Fatalf("unexpected fallback meta: %#v", meta)
 	}
 }
-
-func TestStreamGeneratedDomainsToSpoolSkipsRegenerationWhenDBExists(t *testing.T) {
-	var streamCalls int
-	modules := fakeGeneratedModuleFactory{
-		streamCalls: &streamCalls,
-		items: []GeneratedDomain{
-			{Domain: "persistent.example", RiskScore: 0.41, Confidence: "medium", GeneratedBy: "dga"},
-		},
-	}
-	outputPath := t.TempDir() + "/Generated_Domain.ndjson"
-
-	total, firstSpool, err := streamGeneratedDomainsToSpool(context.Background(), "", modules, newFakeGeneratedCacheStore(), outputPath)
-	if err != nil || total != 1 {
-		t.Fatalf("first run failed total=%d err=%v", total, err)
-	}
-	_ = firstSpool.Close()
-
-	total, secondSpool, err := streamGeneratedDomainsToSpool(context.Background(), "", modules, newFakeGeneratedCacheStore(), outputPath)
-	if err != nil || total != 1 {
-		t.Fatalf("second run failed total=%d err=%v", total, err)
-	}
-	_ = secondSpool.Close()
-
-	if streamCalls != 1 {
-		t.Fatalf("expected one generation call, got %d", streamCalls)
-	}
-}

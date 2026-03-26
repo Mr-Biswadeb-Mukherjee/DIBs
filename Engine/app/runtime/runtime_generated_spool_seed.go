@@ -15,6 +15,9 @@ func (s *generatedDomainSpool) ensureDataset(
 	path string,
 	modules ModuleFactory,
 ) (int64, error) {
+	if err := s.syncDatasetSignature(ctx, path); err != nil {
+		return 0, err
+	}
 	count, err := s.rowCount(ctx)
 	if err != nil {
 		return 0, err
@@ -29,7 +32,7 @@ func (s *generatedDomainSpool) prepareRun(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return errors.New("generated spool db is not initialized")
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE generated_domains SET queued = 0 WHERE queued <> 0")
+	_, err := s.db.ExecContext(ctx, "UPDATE generated_domains SET queued = 0 WHERE done = 0 AND queued <> 0")
 	if err != nil {
 		return fmt.Errorf("reset generated spool run state: %w", err)
 	}
@@ -44,6 +47,18 @@ func (s *generatedDomainSpool) rowCount(ctx context.Context) (int64, error) {
 	var count int64
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("count generated spool rows: %w", err)
+	}
+	return count, nil
+}
+
+func (s *generatedDomainSpool) pendingCount(ctx context.Context) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("generated spool db is not initialized")
+	}
+	row := s.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM generated_domains WHERE done = 0")
+	var count int64
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("count generated spool pending rows: %w", err)
 	}
 	return count, nil
 }
@@ -86,9 +101,13 @@ func streamDomainsToBatchWriter(
 }
 
 func (s *generatedDomainSpool) clearDataset(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM generated_domains")
-	if err != nil {
-		return fmt.Errorf("clear generated spool dataset: %w", err)
+	_, rowsErr := s.db.ExecContext(ctx, "DELETE FROM generated_domains")
+	if rowsErr != nil {
+		return fmt.Errorf("clear generated spool dataset: %w", rowsErr)
+	}
+	_, metaErr := s.db.ExecContext(ctx, "DELETE FROM "+generatedSpoolMetaTable)
+	if metaErr != nil {
+		return fmt.Errorf("clear generated spool metadata: %w", metaErr)
 	}
 	return nil
 }

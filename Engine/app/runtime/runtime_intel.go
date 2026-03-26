@@ -64,8 +64,34 @@ func newIntelPipeline(
 		return nil, err
 	}
 
+	p := buildIntelPipeline(
+		parentCtx,
+		store,
+		generated,
+		service,
+		writer,
+		generatedWriter,
+		resolvedWriter,
+		logErr,
+		onDone,
+	)
+	go p.consumeLoop()
+	return p, nil
+}
+
+func buildIntelPipeline(
+	parentCtx context.Context,
+	store intelQueueStore,
+	generated *generatedDomainSpool,
+	service DNSIntelService,
+	writer RecordWriter,
+	generatedWriter RecordWriter,
+	resolvedWriter RecordWriter,
+	logErr moduleErrorLogger,
+	onDone func(),
+) *intelPipeline {
 	ctx, cancel := context.WithCancel(parentCtx)
-	p := &intelPipeline{
+	return &intelPipeline{
 		store:           store,
 		generated:       generated,
 		service:         service,
@@ -78,8 +104,6 @@ func newIntelPipeline(
 		logErr:          logErr,
 		onDone:          onDone,
 	}
-	go p.consumeLoop()
-	return p, nil
 }
 
 func newPipelineWriters(
@@ -122,6 +146,7 @@ func (p *intelPipeline) WriteUnresolved(domain string) bool {
 		return false
 	}
 	p.generatedWriter.WriteRecord(unresolvedDomainRecord(domain, p.generatedMeta(domain)))
+	p.markGeneratedDone(domain)
 	return true
 }
 
@@ -137,6 +162,7 @@ func (p *intelPipeline) writeResolved(domain string) bool {
 	record := resolvedDomainRecord(domain, p.generatedMeta(domain))
 	p.resolvedWriter.WriteRecord(record)
 	p.generatedWriter.WriteRecord(record)
+	p.markGeneratedDone(record.Domain)
 	return true
 }
 

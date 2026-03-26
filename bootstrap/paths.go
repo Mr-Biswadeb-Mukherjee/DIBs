@@ -11,15 +11,16 @@ import (
 )
 
 type runtimePaths struct {
-	repo            string
-	engine          string
-	logsDir         string
-	keywordsCSV     string
-	settingConf     string
-	redisConf       string
-	dnsIntelOutput  string
-	generatedOutput string
-	resolvedOutput  string
+	repo             string
+	engine           string
+	logsDir          string
+	keywordsCSV      string
+	settingConf      string
+	redisConf        string
+	dnsIntelOutput   string
+	generatedOutput  string
+	resolvedOutput   string
+	runMetricsOutput string
 }
 
 var (
@@ -32,15 +33,16 @@ func loadRuntimePaths() runtimePaths {
 		repo := detectRuntimeRoot()
 		engineDir := filepath.Join(repo, "Engine")
 		pathsSet = runtimePaths{
-			repo:            repo,
-			engine:          engineDir,
-			logsDir:         filepath.Join(repo, "Logs"),
-			keywordsCSV:     filepath.Join(engineDir, "Input", "Keywords.csv"),
-			settingConf:     filepath.Join(repo, "Setting", "setting.conf"),
-			redisConf:       filepath.Join(repo, "Setting", "redis.yaml"),
-			dnsIntelOutput:  filepath.Join(repo, "Output", "DNS_Intel.ndjson"),
-			generatedOutput: filepath.Join(repo, "Output", "Generated_Domain.ndjson"),
-			resolvedOutput:  filepath.Join(repo, "Output", "Resolved_Domain.ndjson"),
+			repo:             repo,
+			engine:           engineDir,
+			logsDir:          filepath.Join(repo, "Logs"),
+			keywordsCSV:      filepath.Join(engineDir, "Input", "Keywords.csv"),
+			settingConf:      filepath.Join(repo, "Setting", "setting.conf"),
+			redisConf:        filepath.Join(repo, "Setting", "redis.yaml"),
+			dnsIntelOutput:   filepath.Join(repo, "Output", "DNS_Intel.ndjson"),
+			generatedOutput:  filepath.Join(repo, "Output", "Generated_Domain.ndjson"),
+			resolvedOutput:   filepath.Join(repo, "Output", "Resolved_Domain.ndjson"),
+			runMetricsOutput: filepath.Join(repo, "Output", "Run_Metrics.ndjson"),
 		}
 	})
 	return pathsSet
@@ -78,9 +80,43 @@ func executableDir() string {
 }
 
 func isTemporaryBuildDir(dir string) bool {
-	tmp := filepath.Clean(os.TempDir())
-	clean := filepath.Clean(dir)
-	return strings.Contains(clean, filepath.Join(tmp, "go-build"))
+	clean := filepath.Clean(strings.TrimSpace(dir))
+	if clean == "" || !hasGoBuildPathSegment(clean) {
+		return false
+	}
+	if isPathUnderRoot(clean, filepath.Clean(os.TempDir())) {
+		return true
+	}
+	if cache := strings.TrimSpace(os.Getenv("GOCACHE")); cache != "" {
+		if isPathUnderRoot(clean, filepath.Clean(cache)) {
+			return true
+		}
+	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		return isPathUnderRoot(clean, filepath.Clean(cache))
+	}
+	return false
+}
+
+func hasGoBuildPathSegment(path string) bool {
+	parts := strings.Split(path, string(filepath.Separator))
+	for _, part := range parts {
+		if strings.HasPrefix(part, "go-build") {
+			return true
+		}
+	}
+	return false
+}
+
+func isPathUnderRoot(path string, root string) bool {
+	if path == "" || root == "" {
+		return false
+	}
+	if path == root {
+		return true
+	}
+	prefix := root + string(filepath.Separator)
+	return strings.HasPrefix(path, prefix)
 }
 
 func findGoModuleRoot(start string) string {

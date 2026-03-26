@@ -23,6 +23,7 @@ type appRuntime struct {
 	cfg         Config
 	paths       Paths
 	started     time.Time
+	qpsHistory  string
 	cache       CacheStore
 	generated   *generatedDomainSpool
 	limiter     RateLimiter
@@ -48,10 +49,12 @@ func newAppRuntime(deps Dependencies) (*appRuntime, error) {
 		return nil, err
 	}
 
+	startedAt := deps.Startup.Start("Starting Infermal_v2 Engine")
 	rt := &appRuntime{
 		cfg:         deps.Config,
 		paths:       deps.Paths,
-		started:     deps.Startup.Start("Starting Infermal_v2 Engine"),
+		started:     startedAt,
+		qpsHistory:  qpsHistoryOutputPath(deps.Paths.RunMetricsOutput, startedAt),
 		cache:       deps.Cache,
 		limiter:     deps.Limiter,
 		initLimiter: deps.InitLimiter,
@@ -109,7 +112,8 @@ func hasAppLoggers(deps Dependencies) bool {
 func hasOutputPaths(deps Dependencies) bool {
 	return deps.Paths.DNSIntelOutput != "" &&
 		deps.Paths.GeneratedOutput != "" &&
-		deps.Paths.ResolvedOutput != ""
+		deps.Paths.ResolvedOutput != "" &&
+		deps.Paths.RunMetricsOutput != ""
 }
 
 func newModuleErrorLogger(appLog ModuleLogger) moduleErrorLogger {
@@ -139,10 +143,16 @@ func (logs runtimeLogs) Close() error {
 }
 
 func (rt *appRuntime) finishRun(total, resolved int64) {
+	finishedAt := time.Now()
 	rt.startup.Finish(rt.started, total, resolved)
+	if err := rt.writeRunMetrics(total, resolved, finishedAt); err != nil {
+		rt.logErr("run-metrics", rt.paths.RunMetricsOutput, err)
+	}
 	fmt.Printf("✔ Generated domains written to %s\n", rt.paths.GeneratedOutput)
 	fmt.Printf("✔ Resolved domains written to %s\n", rt.paths.ResolvedOutput)
 	fmt.Printf("✔ DNS intel written to %s\n", rt.paths.DNSIntelOutput)
+	fmt.Printf("✔ Run metrics written to %s\n", rt.paths.RunMetricsOutput)
+	fmt.Printf("✔ QPS history written to %s\n", rt.qpsHistory)
 }
 
 func (rt *appRuntime) initRateLimiter(total int64, workers int) {

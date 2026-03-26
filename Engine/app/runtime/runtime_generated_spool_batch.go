@@ -61,7 +61,7 @@ func fetchUnqueuedRows(ctx context.Context, tx *sql.Tx, limit int) ([]spooledGen
 	rows, err := tx.QueryContext(ctx, `
 SELECT id, domain, risk_score, confidence, generated_by
 FROM generated_domains
-WHERE queued = 0
+WHERE done = 0 AND queued = 0
 ORDER BY id
 LIMIT ?
 `, limit)
@@ -141,6 +141,18 @@ func (s *generatedDomainSpool) releaseRows(ctx context.Context, rows []spooledGe
 	query := "UPDATE generated_domains SET queued = 0 WHERE id IN (" + placeholders + ")"
 	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("release generated batch rows: %w", err)
+	}
+	return nil
+}
+
+func (s *generatedDomainSpool) markDone(ctx context.Context, domain string) error {
+	domain = normalizeGeneratedDomainName(domain)
+	if domain == "" || s == nil || s.db == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE generated_domains SET done = 1 WHERE domain = ? AND done = 0", domain)
+	if err != nil {
+		return fmt.Errorf("mark generated spool row done: %w", err)
 	}
 	return nil
 }

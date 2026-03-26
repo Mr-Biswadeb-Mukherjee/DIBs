@@ -49,24 +49,40 @@ func streamGeneratedDomainsToSpool(
 	if err != nil {
 		return 0, nil, err
 	}
-	count, err := spool.ensureDataset(ctx, path, modules)
+	pending, err := prepareGeneratedSpoolForRun(ctx, spool, path, modules, generatedOutput)
 	if err != nil {
 		_ = spool.Close()
 		return 0, nil, err
 	}
-	if count == 0 {
+	if pending == 0 {
 		_ = spool.Close()
 		return 0, nil, nil
-	}
-	if err := spool.prepareRun(ctx); err != nil {
-		_ = spool.Close()
-		return 0, nil, err
 	}
 	if err := primeGeneratedQueue(ctx, store, spool); err != nil {
 		_ = spool.Close()
 		return 0, nil, err
 	}
-	return count, spool, nil
+	return pending, spool, nil
+}
+
+func prepareGeneratedSpoolForRun(
+	ctx context.Context,
+	spool *generatedDomainSpool,
+	path string,
+	modules ModuleFactory,
+	generatedOutput string,
+) (int64, error) {
+	count, err := spool.ensureDataset(ctx, path, modules)
+	if err != nil || count == 0 {
+		return count, err
+	}
+	if err := spool.prepareRun(ctx); err != nil {
+		return 0, err
+	}
+	if err := spool.syncDoneFromGeneratedOutput(ctx, generatedOutput); err != nil {
+		return 0, err
+	}
+	return spool.pendingCount(ctx)
 }
 
 func primeGeneratedQueue(

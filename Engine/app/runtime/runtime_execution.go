@@ -20,6 +20,7 @@ type scanRunner struct {
 	cdm      CooldownManager
 	pool     WorkerPool
 	progress *liveProgress
+	qps      *qpsHistoryWriter
 
 	successTTL time.Duration
 	failTTL    time.Duration
@@ -52,6 +53,7 @@ func (sr *scanRunner) onIntelDone() func() {
 
 func (sr *scanRunner) run(ctx context.Context, modules *appModules) int64 {
 	sr.prepare()
+	sr.startQPSHistory()
 	cancel := sr.startAdaptiveControl(ctx)
 	defer cancel()
 
@@ -60,6 +62,18 @@ func (sr *scanRunner) run(ctx context.Context, modules *appModules) int64 {
 	sr.processDomains(ctx, modules)
 	sr.shutdown(modules)
 	return atomic.LoadInt64(&sr.resolved)
+}
+
+func (sr *scanRunner) startQPSHistory() {
+	qps, err := newQPSHistoryWriter(sr.rt, &sr.completed, &sr.intelDone)
+	if err != nil {
+		sr.rt.logErr("qps-history", sr.rt.qpsHistory, err)
+		return
+	}
+	sr.qps = qps
+	if sr.qps != nil {
+		sr.qps.Start()
+	}
 }
 
 func (sr *scanRunner) prepare() {
@@ -207,5 +221,10 @@ func (sr *scanRunner) shutdown(modules *appModules) {
 	if sr.progress != nil {
 		sr.progress.Stop()
 		sr.progress.Finish()
+	}
+	if sr.qps != nil {
+		if err := sr.qps.Stop(); err != nil {
+			sr.rt.logErr("qps-history", sr.rt.qpsHistory, err)
+		}
 	}
 }

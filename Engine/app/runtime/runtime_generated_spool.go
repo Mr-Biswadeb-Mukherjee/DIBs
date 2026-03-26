@@ -19,6 +19,7 @@ const (
 	generatedSpoolFileName   = "generated_domains.spool.sqlite3"
 	generatedBatchSize       = 200
 	generatedInsertBatchSize = 1000
+	generatedSpoolMetaTable  = "generated_spool_meta"
 )
 
 type spooledGeneratedDomain struct {
@@ -80,22 +81,65 @@ func (s *generatedDomainSpool) prepare() error {
 }
 
 func initGeneratedSpoolSchema(db *sql.DB) error {
-	ddl := `
+	createTableDDL := `
 CREATE TABLE IF NOT EXISTS generated_domains (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   domain TEXT NOT NULL,
   risk_score REAL NOT NULL,
   confidence TEXT NOT NULL,
   generated_by TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
   queued INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_generated_domains_queued_id
-ON generated_domains(queued, id);
-CREATE INDEX IF NOT EXISTS idx_generated_domains_domain
-ON generated_domains(domain);
-`
-	if _, err := db.Exec(ddl); err != nil {
+);`
+	if _, err := db.Exec(createTableDDL); err != nil {
 		return fmt.Errorf("create generated spool schema: %w", err)
+	}
+	if err := ensureGeneratedSpoolMetaTable(db); err != nil {
+		return err
+	}
+	if err := ensureGeneratedSpoolDoneColumn(db); err != nil {
+		return err
+	}
+	return ensureGeneratedSpoolIndexes(db)
+}
+
+func ensureGeneratedSpoolMetaTable(db *sql.DB) error {
+	stmt := `
+CREATE TABLE IF NOT EXISTS generated_spool_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);`
+	if _, err := db.Exec(stmt); err != nil {
+		return fmt.Errorf("create generated spool meta table: %w", err)
+	}
+	return nil
+}
+
+func ensureGeneratedSpoolDoneColumn(db *sql.DB) error {
+	_, err := db.Exec("ALTER TABLE generated_domains ADD COLUMN done INTEGER NOT NULL DEFAULT 0")
+	if err == nil || isDuplicateColumnError(err) {
+		return nil
+	}
+	return fmt.Errorf("ensure generated spool done column: %w", err)
+}
+
+func isDuplicateColumnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
+}
+
+func ensureGeneratedSpoolIndexes(db *sql.DB) error {
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_generated_domains_queued_id ON generated_domains(queued, id)",
+		"CREATE INDEX IF NOT EXISTS idx_generated_domains_domain ON generated_domains(domain)",
+		"CREATE INDEX IF NOT EXISTS idx_generated_domains_done_queued_id ON generated_domains(done, queued, id)",
+	}
+	for _, stmt := range indexes {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("create generated spool index: %w", err)
+		}
 	}
 	return nil
 }
