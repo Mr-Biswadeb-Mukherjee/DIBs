@@ -34,6 +34,8 @@ type intelPipeline struct {
 	writer          RecordWriter
 	generatedWriter RecordWriter
 	resolvedWriter  RecordWriter
+	clusterWriter   RecordWriter
+	clusterIndex    *asnClusterIndex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -57,12 +59,12 @@ func newIntelPipeline(
 		return nil, errors.New("dns intel service is required")
 	}
 
-	writer, generatedWriter, resolvedWriter, err := newPipelineWriters(writerFactory, paths, logErr)
+	writer, generatedWriter, resolvedWriter, clusterWriter, err := newPipelineWriters(writerFactory, paths, logErr)
 	if err != nil {
 		return nil, err
 	}
 	if err := resetIntelQueue(store); err != nil {
-		_ = closeWriters(writer, generatedWriter, resolvedWriter)
+		_ = closeWriters(writer, generatedWriter, resolvedWriter, clusterWriter)
 		return nil, err
 	}
 
@@ -75,6 +77,7 @@ func newIntelPipeline(
 		writer,
 		generatedWriter,
 		resolvedWriter,
+		clusterWriter,
 		logErr,
 		onDone,
 	)
@@ -91,6 +94,7 @@ func buildIntelPipeline(
 	writer RecordWriter,
 	generatedWriter RecordWriter,
 	resolvedWriter RecordWriter,
+	clusterWriter RecordWriter,
 	logErr moduleErrorLogger,
 	onDone func(),
 ) *intelPipeline {
@@ -103,6 +107,8 @@ func buildIntelPipeline(
 		writer:          writer,
 		generatedWriter: generatedWriter,
 		resolvedWriter:  resolvedWriter,
+		clusterWriter:   clusterWriter,
+		clusterIndex:    newASNClusterIndex(),
 		ctx:             ctx,
 		cancel:          cancel,
 		done:            make(chan error, 1),
@@ -115,22 +121,27 @@ func newPipelineWriters(
 	writerFactory WriterFactory,
 	paths Paths,
 	logErr moduleErrorLogger,
-) (RecordWriter, RecordWriter, RecordWriter, error) {
+) (RecordWriter, RecordWriter, RecordWriter, RecordWriter, error) {
 	writer, err := newDNSIntelWriter(paths, writerFactory, logErr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	generatedWriter, err := newGeneratedDomainWriter(paths, writerFactory, logErr)
 	if err != nil {
 		_ = writer.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	resolvedWriter, err := newResolvedDomainWriter(paths, writerFactory, logErr)
 	if err != nil {
 		_ = closeWriters(writer, generatedWriter)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return writer, generatedWriter, resolvedWriter, nil
+	clusterWriter, err := newClusterWriter(paths, writerFactory, logErr)
+	if err != nil {
+		_ = closeWriters(writer, generatedWriter, resolvedWriter)
+		return nil, nil, nil, nil, err
+	}
+	return writer, generatedWriter, resolvedWriter, clusterWriter, nil
 }
 
 func (p *intelPipeline) EnqueueResolved(domain string) bool {
@@ -183,7 +194,7 @@ func (p *intelPipeline) StopAndWait() error {
 	consumeErr := <-p.done
 	p.cancel()
 
-	closeErr := closeWriters(p.writer, p.generatedWriter, p.resolvedWriter)
+	closeErr := closeWriters(p.writer, p.generatedWriter, p.resolvedWriter, p.clusterWriter)
 	cleanupErr := resetIntelQueue(p.store)
 	return errors.Join(stopErr, consumeErr, closeErr, cleanupErr)
 }
@@ -257,6 +268,7 @@ func (p *intelPipeline) processDomain(domain string) {
 
 	for _, rec := range records {
 		p.writer.WriteRecord(intelRecordToNDJSON(rec))
+		p.writeClusterRecords(rec, domain)
 		recordDomain := strings.TrimSpace(rec.Domain)
 		if recordDomain == "" {
 			recordDomain = domain

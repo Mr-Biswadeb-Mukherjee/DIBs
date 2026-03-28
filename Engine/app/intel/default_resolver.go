@@ -17,12 +17,13 @@ type defaultResolver struct {
 }
 
 func NewDefaultDNSIntelService(workers int, timeout time.Duration) *DNSIntelService {
-	return newDNSIntelServiceWithWhois(
+	return newDNSIntelServiceWithLookups(
 		NewDefaultResolver(),
 		nil,
 		workers,
 		timeout,
 		dns_intel.NewDefaultWhoisLookup(),
+		dns_intel.NewDefaultASNLookup(),
 	)
 }
 

@@ -68,6 +68,7 @@ func BuildEngineDependencies() (app.Dependencies, error) {
 			DNSIntelOutput:   paths.dnsIntelOutput,
 			GeneratedOutput:  paths.generatedOutput,
 			ResolvedOutput:   paths.resolvedOutput,
+			ClusterOutput:    paths.clusterOutput,
 			RunMetricsOutput: paths.runMetricsOutput,
 		},
 		Startup:     newStartupAdapter(),

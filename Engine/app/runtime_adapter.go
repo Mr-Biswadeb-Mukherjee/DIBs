@@ -101,6 +101,7 @@ func (a runtimeIntelServiceAdapter) Run(
 			NS:                   rec.NS,
 			MX:                   rec.MX,
 			TXT:                  rec.TXT,
+			ASNs:                 toRuntimeIntelASNs(rec.ASNs),
 			Providers:            rec.Providers,
 			RegistrarWhoisServer: rec.RegistrarWhoisServer,
 			UpdatedDate:          rec.UpdatedDate,
@@ -108,4 +109,20 @@ func (a runtimeIntelServiceAdapter) Run(
 		})
 	}
 	return out, nil
+}
+
+func toRuntimeIntelASNs(records []IntelASNRecord) []runtime.IntelASNRecord {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]runtime.IntelASNRecord, 0, len(records))
+	for _, rec := range records {
+		out = append(out, runtime.IntelASNRecord{
+			IP:     rec.IP,
+			ASN:    rec.ASN,
+			Prefix: rec.Prefix,
+			ASName: rec.ASName,
+		})
+	}
+	return out
 }

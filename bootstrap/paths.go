@@ -20,6 +20,7 @@ type runtimePaths struct {
 	dnsIntelOutput   string
 	generatedOutput  string
 	resolvedOutput   string
+	clusterOutput    string
 	runMetricsOutput string
 }
 
@@ -42,6 +43,7 @@ func loadRuntimePaths() runtimePaths {
 			dnsIntelOutput:   filepath.Join(repo, "Output", "DNS_Intel.ndjson"),
 			generatedOutput:  filepath.Join(repo, "Output", "Generated_Domain.ndjson"),
 			resolvedOutput:   filepath.Join(repo, "Output", "Resolved_Domain.ndjson"),
+			clusterOutput:    filepath.Join(repo, "Output", "cluster.ndjson"),
 			runMetricsOutput: filepath.Join(repo, "Output", "Run_Metrics.ndjson"),
 		}
 	})

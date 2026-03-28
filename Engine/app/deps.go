@@ -25,6 +25,7 @@ type Paths struct {
 	DNSIntelOutput   string
 	GeneratedOutput  string
 	ResolvedOutput   string
+	ClusterOutput    string
 	RunMetricsOutput string
 }
 

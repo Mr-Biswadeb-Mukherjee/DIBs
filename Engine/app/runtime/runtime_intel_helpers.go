@@ -13,18 +13,26 @@ import (
 )
 
 type intelNDJSONRecord struct {
-	Domain               string   `json:"domain"`
-	A                    []string `json:"a,omitempty"`
-	AAAA                 []string `json:"aaaa,omitempty"`
-	CNAME                []string `json:"cname,omitempty"`
-	NS                   []string `json:"ns,omitempty"`
-	MX                   []string `json:"mx,omitempty"`
-	TXT                  []string `json:"txt,omitempty"`
-	Providers            []string `json:"providers,omitempty"`
-	RegistrarWhoisServer string   `json:"registrar_whois_server,omitempty"`
-	UpdatedDate          string   `json:"updated_date,omitempty"`
-	CreationDate         string   `json:"creation_date,omitempty"`
-	TimestampUTC         string   `json:"timestamp_utc"`
+	Domain               string                 `json:"domain"`
+	A                    []string               `json:"a,omitempty"`
+	AAAA                 []string               `json:"aaaa,omitempty"`
+	CNAME                []string               `json:"cname,omitempty"`
+	NS                   []string               `json:"ns,omitempty"`
+	MX                   []string               `json:"mx,omitempty"`
+	TXT                  []string               `json:"txt,omitempty"`
+	ASNs                 []intelASNNDJSONRecord `json:"asn,omitempty"`
+	Providers            []string               `json:"providers,omitempty"`
+	RegistrarWhoisServer string                 `json:"registrar_whois_server,omitempty"`
+	UpdatedDate          string                 `json:"updated_date,omitempty"`
+	CreationDate         string                 `json:"creation_date,omitempty"`
+	TimestampUTC         string                 `json:"timestamp_utc"`
+}
+
+type intelASNNDJSONRecord struct {
+	IP     string `json:"ip"`
+	ASN    string `json:"asn"`
+	Prefix string `json:"prefix,omitempty"`
+	ASName string `json:"as_name,omitempty"`
 }
 
 type generatedDomainMeta struct {
@@ -121,6 +129,14 @@ func newResolvedDomainWriter(
 	return newNDJSONWriter(paths.ResolvedOutput, writers, "resolved-domain-writer", logErr)
 }
 
+func newClusterWriter(
+	paths Paths,
+	writers WriterFactory,
+	logErr moduleErrorLogger,
+) (RecordWriter, error) {
+	return newNDJSONWriter(paths.ClusterOutput, writers, "cluster-writer", logErr)
+}
+
 func newNDJSONWriter(
 	path string,
 	writers WriterFactory,
@@ -156,12 +172,29 @@ func intelRecordToNDJSON(r IntelRecord) intelNDJSONRecord {
 		NS:                   r.NS,
 		MX:                   r.MX,
 		TXT:                  r.TXT,
+		ASNs:                 asnRecordsToNDJSON(r.ASNs),
 		Providers:            r.Providers,
 		RegistrarWhoisServer: r.RegistrarWhoisServer,
 		UpdatedDate:          r.UpdatedDate,
 		CreationDate:         r.CreationDate,
 		TimestampUTC:         time.Now().UTC().Format(time.RFC3339),
 	}
+}
+
+func asnRecordsToNDJSON(records []IntelASNRecord) []intelASNNDJSONRecord {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]intelASNNDJSONRecord, 0, len(records))
+	for _, record := range records {
+		out = append(out, intelASNNDJSONRecord{
+			IP:     strings.TrimSpace(record.IP),
+			ASN:    strings.TrimSpace(record.ASN),
+			Prefix: strings.TrimSpace(record.Prefix),
+			ASName: strings.TrimSpace(record.ASName),
+		})
+	}
+	return out
 }
 
 func makeGeneratedDomainIndex(items []GeneratedDomain) ([]string, map[string]generatedDomainMeta) {

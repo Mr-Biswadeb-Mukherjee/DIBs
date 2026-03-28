@@ -113,6 +113,7 @@ func hasOutputPaths(deps Dependencies) bool {
 	return deps.Paths.DNSIntelOutput != "" &&
 		deps.Paths.GeneratedOutput != "" &&
 		deps.Paths.ResolvedOutput != "" &&
+		deps.Paths.ClusterOutput != "" &&
 		deps.Paths.RunMetricsOutput != ""
 }
 
@@ -151,6 +152,7 @@ func (rt *appRuntime) finishRun(total, resolved int64) {
 	fmt.Printf("✔ Generated domains written to %s\n", rt.paths.GeneratedOutput)
 	fmt.Printf("✔ Resolved domains written to %s\n", rt.paths.ResolvedOutput)
 	fmt.Printf("✔ DNS intel written to %s\n", rt.paths.DNSIntelOutput)
+	fmt.Printf("✔ Cluster intel written to %s\n", rt.paths.ClusterOutput)
 	fmt.Printf("✔ Run metrics written to %s\n", rt.paths.RunMetricsOutput)
 	fmt.Printf("✔ QPS history written to %s\n", rt.qpsHistory)
 }

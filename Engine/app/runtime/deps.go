@@ -25,6 +25,7 @@ type Paths struct {
 	DNSIntelOutput   string
 	GeneratedOutput  string
 	ResolvedOutput   string
+	ClusterOutput    string
 	RunMetricsOutput string
 }
 
@@ -199,10 +200,18 @@ type IntelRecord struct {
 	NS                   []string
 	MX                   []string
 	TXT                  []string
+	ASNs                 []IntelASNRecord
 	Providers            []string
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+}
+
+type IntelASNRecord struct {
+	IP     string
+	ASN    string
+	Prefix string
+	ASName string
 }
 
 type DNSIntelService interface {

@@ -28,6 +28,7 @@ type IntelRecord struct {
 	NS                   []string
 	MX                   []string
 	TXT                  []string
+	ASNs                 []ASNRecord
 	Providers            []string
 	RegistrarWhoisServer string
 	UpdatedDate          string
@@ -59,6 +60,10 @@ type WhoisLookup interface {
 	Lookup(ctx context.Context, domain string) (WhoisRecord, error)
 }
 
+type ASNLookup interface {
+	Lookup(ctx context.Context, ip string) (ASNRecord, error)
+}
+
 //
 // ==============================
 // Processor
@@ -69,6 +74,7 @@ type Processor struct {
 	resolver Resolver
 	cache    Cache
 	whois    WhoisLookup
+	asn      ASNLookup
 
 	workers int
 	timeout time.Duration
@@ -85,6 +91,17 @@ func NewProcessorWithWhois(
 	timeout time.Duration,
 	whois WhoisLookup,
 ) *Processor {
+	return NewProcessorWithLookups(r, c, workers, timeout, whois, nil)
+}
+
+func NewProcessorWithLookups(
+	r Resolver,
+	c Cache,
+	workers int,
+	timeout time.Duration,
+	whois WhoisLookup,
+	asn ASNLookup,
+) *Processor {
 	if workers <= 0 {
 		workers = 10
 	}
@@ -96,6 +113,7 @@ func NewProcessorWithWhois(
 		resolver: r,
 		cache:    c,
 		whois:    whois,
+		asn:      asn,
 		workers:  workers,
 		timeout:  timeout,
 	}
@@ -250,16 +268,20 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 
 	wg.Wait()
 
+	a = sanitize(a)
+	aaaa = sanitize(aaaa)
+	asnRecords := p.lookupASNs(ctx, combineIPs(a, aaaa))
 	providers := extractProviders(cname, ns)
 
 	return IntelRecord{
 		Domain:               d.Domain,
-		A:                    sanitize(a),
-		AAAA:                 sanitize(aaaa),
+		A:                    a,
+		AAAA:                 aaaa,
 		CNAME:                sanitize(cname),
 		NS:                   sanitize(ns),
 		MX:                   sanitize(mx),
 		TXT:                  sanitize(txt),
+		ASNs:                 asnRecords,
 		Providers:            providers,
 		RegistrarWhoisServer: whois.RegistrarWhoisServer,
 		UpdatedDate:          whois.UpdatedDate,

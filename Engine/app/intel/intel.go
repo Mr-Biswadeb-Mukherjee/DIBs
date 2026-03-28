@@ -28,10 +28,18 @@ type Record struct {
 	NS                   []string
 	MX                   []string
 	TXT                  []string
+	ASNs                 []ASNInfo
 	Providers            []string
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+}
+
+type ASNInfo struct {
+	IP     string
+	ASN    string
+	Prefix string
+	ASName string
 }
 
 //
@@ -50,18 +58,19 @@ func NewDNSIntelService(
 	workers int,
 	timeout time.Duration,
 ) *DNSIntelService {
-	return newDNSIntelServiceWithWhois(resolver, cache, workers, timeout, nil)
+	return newDNSIntelServiceWithLookups(resolver, cache, workers, timeout, nil, nil)
 }
 
-func newDNSIntelServiceWithWhois(
+func newDNSIntelServiceWithLookups(
 	resolver dns_intel.Resolver,
 	cache dns_intel.Cache,
 	workers int,
 	timeout time.Duration,
 	whois dns_intel.WhoisLookup,
+	asn dns_intel.ASNLookup,
 ) *DNSIntelService {
 	return &DNSIntelService{
-		processor: dns_intel.NewProcessorWithWhois(resolver, cache, workers, timeout, whois),
+		processor: dns_intel.NewProcessorWithLookups(resolver, cache, workers, timeout, whois, asn),
 	}
 }
 
@@ -104,6 +113,7 @@ func (s *DNSIntelService) Run(
 			NS:                   r.NS,
 			MX:                   r.MX,
 			TXT:                  r.TXT,
+			ASNs:                 mapASNInfo(r.ASNs),
 			Providers:            r.Providers,
 			RegistrarWhoisServer: r.RegistrarWhoisServer,
 			UpdatedDate:          r.UpdatedDate,
@@ -112,4 +122,20 @@ func (s *DNSIntelService) Run(
 	}
 
 	return res, nil
+}
+
+func mapASNInfo(records []dns_intel.ASNRecord) []ASNInfo {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]ASNInfo, 0, len(records))
+	for _, record := range records {
+		out = append(out, ASNInfo{
+			IP:     record.IP,
+			ASN:    record.ASN,
+			Prefix: record.Prefix,
+			ASName: record.ASName,
+		})
+	}
+	return out
 }

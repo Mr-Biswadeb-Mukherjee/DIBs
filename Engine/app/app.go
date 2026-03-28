@@ -33,10 +33,18 @@ type IntelRecord struct {
 	NS                   []string
 	MX                   []string
 	TXT                  []string
+	ASNs                 []IntelASNRecord
 	Providers            []string
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+}
+
+type IntelASNRecord struct {
+	IP     string
+	ASN    string
+	Prefix string
+	ASName string
 }
 
 type DNSIntelService interface {
@@ -100,6 +108,7 @@ func toRuntimePaths(paths Paths) runtime.Paths {
 		DNSIntelOutput:   paths.DNSIntelOutput,
 		GeneratedOutput:  paths.GeneratedOutput,
 		ResolvedOutput:   paths.ResolvedOutput,
+		ClusterOutput:    paths.ClusterOutput,
 		RunMetricsOutput: paths.RunMetricsOutput,
 	}
 }
@@ -227,10 +236,27 @@ func mapIntelRecords(records []intel.Record) []IntelRecord {
 			NS:                   rec.NS,
 			MX:                   rec.MX,
 			TXT:                  rec.TXT,
+			ASNs:                 toAppIntelASNs(rec.ASNs),
 			Providers:            rec.Providers,
 			RegistrarWhoisServer: rec.RegistrarWhoisServer,
 			UpdatedDate:          rec.UpdatedDate,
 			CreationDate:         rec.CreationDate,
+		})
+	}
+	return out
+}
+
+func toAppIntelASNs(records []intel.ASNInfo) []IntelASNRecord {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]IntelASNRecord, 0, len(records))
+	for _, rec := range records {
+		out = append(out, IntelASNRecord{
+			IP:     rec.IP,
+			ASN:    rec.ASN,
+			Prefix: rec.Prefix,
+			ASName: rec.ASName,
 		})
 	}
 	return out
