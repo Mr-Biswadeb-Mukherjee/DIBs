@@ -37,11 +37,12 @@ type intelPipeline struct {
 	clusterWriter   RecordWriter
 	clusterIndex    *asnClusterIndex
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	done   chan error
-	logErr moduleErrorLogger
-	onDone func()
+	parentCtx context.Context
+	ctx       context.Context
+	cancel    context.CancelFunc
+	done      chan error
+	logErr    moduleErrorLogger
+	onDone    func()
 }
 
 func newIntelPipeline(
@@ -98,7 +99,7 @@ func buildIntelPipeline(
 	logErr moduleErrorLogger,
 	onDone func(),
 ) *intelPipeline {
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(context.Background())
 	return &intelPipeline{
 		store:           store,
 		generated:       generated,
@@ -109,6 +110,7 @@ func buildIntelPipeline(
 		resolvedWriter:  resolvedWriter,
 		clusterWriter:   clusterWriter,
 		clusterIndex:    newASNClusterIndex(),
+		parentCtx:       parentCtx,
 		ctx:             ctx,
 		cancel:          cancel,
 		done:            make(chan error, 1),
@@ -217,6 +219,13 @@ func (p *intelPipeline) consumeLoop() {
 			p.done <- nil
 			return
 		}
+		if p.parentCanceled() {
+			p.WriteResolvedFallback(value)
+			if p.onDone != nil {
+				p.onDone()
+			}
+			continue
+		}
 		if p.cdm != nil {
 			if errs := waitForCooldown(p.ctx, p.cdm); len(errs) > 0 {
 				if p.ctx.Err() != nil {
@@ -234,6 +243,10 @@ func (p *intelPipeline) consumeLoop() {
 			p.onDone()
 		}
 	}
+}
+
+func (p *intelPipeline) parentCanceled() bool {
+	return p != nil && p.parentCtx != nil && p.parentCtx.Err() != nil
 }
 
 func (p *intelPipeline) popValue() (string, bool, error) {
