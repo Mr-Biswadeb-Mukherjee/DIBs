@@ -46,3 +46,29 @@ func TestLoadEndpointContractRejectsMissingRatePolicy(t *testing.T) {
 		t.Fatal("expected error for missing rate policy")
 	}
 }
+
+func TestLoadEndpointContractFallsBackToEmbeddedDefault(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd failed: %v", err)
+	}
+	t.Cleanup(func() {
+		if chErr := os.Chdir(wd); chErr != nil {
+			t.Fatalf("restore working directory failed: %v", chErr)
+		}
+	})
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("Chdir failed: %v", err)
+	}
+
+	contract, err := LoadEndpointContract(DefaultEndpointContractPath)
+	if err != nil {
+		t.Fatalf("LoadEndpointContract error: %v", err)
+	}
+	if contract.APIKeyHeader == "" {
+		t.Fatal("expected api key header from embedded contract")
+	}
+	if _, ok := contract.Routes["health"]; !ok {
+		t.Fatal("expected health route from embedded contract")
+	}
+}

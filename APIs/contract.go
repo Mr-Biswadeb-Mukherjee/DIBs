@@ -6,14 +6,19 @@ package apis
 import (
 	"bufio"
 	"encoding/json"
+	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 )
 
 const DefaultEndpointContractPath = "APIs/Endpoint.ndjson"
+
+//go:embed Endpoint.ndjson
+var embeddedDefaultEndpointContract string
 
 type EndpointContract struct {
 	APIKeyHeader string
@@ -52,12 +57,21 @@ var requiredRouteNames = []string{
 func LoadEndpointContract(path string) (EndpointContract, error) {
 	f, err := os.Open(path)
 	if err != nil {
+		if path == DefaultEndpointContractPath && !errors.Is(err, os.ErrNotExist) {
+			return EndpointContract{}, err
+		}
+		if path == DefaultEndpointContractPath {
+			return parseEndpointContract(strings.NewReader(embeddedDefaultEndpointContract))
+		}
 		return EndpointContract{}, err
 	}
 	defer f.Close()
+	return parseEndpointContract(f)
+}
 
+func parseEndpointContract(src io.Reader) (EndpointContract, error) {
 	contract := EndpointContract{Routes: make(map[string]RouteSpec)}
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(src)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
