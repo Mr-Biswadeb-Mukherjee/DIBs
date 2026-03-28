@@ -94,14 +94,17 @@ func (a runtimeIntelServiceAdapter) Run(
 	out := make([]runtime.IntelRecord, 0, len(records))
 	for _, rec := range records {
 		out = append(out, runtime.IntelRecord{
-			Domain:    rec.Domain,
-			A:         rec.A,
-			AAAA:      rec.AAAA,
-			CNAME:     rec.CNAME,
-			NS:        rec.NS,
-			MX:        rec.MX,
-			TXT:       rec.TXT,
-			Providers: rec.Providers,
+			Domain:               rec.Domain,
+			A:                    rec.A,
+			AAAA:                 rec.AAAA,
+			CNAME:                rec.CNAME,
+			NS:                   rec.NS,
+			MX:                   rec.MX,
+			TXT:                  rec.TXT,
+			Providers:            rec.Providers,
+			RegistrarWhoisServer: rec.RegistrarWhoisServer,
+			UpdatedDate:          rec.UpdatedDate,
+			CreationDate:         rec.CreationDate,
 		})
 	}
 	return out, nil

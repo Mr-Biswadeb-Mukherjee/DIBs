@@ -31,6 +31,7 @@ type Logger struct {
 	wg        sync.WaitGroup
 
 	dropped int64
+	closed  int32
 
 	errMu    sync.Mutex
 	closeErr error
@@ -75,6 +76,7 @@ func (l *Logger) Close() error {
 	}
 
 	l.closeOnce.Do(func() {
+		atomic.StoreInt32(&l.closed, 1)
 		close(l.entries)
 		l.wg.Wait()
 	})
@@ -96,10 +98,19 @@ func (l *Logger) writeLog(level, format string, v ...interface{}) {
 	if l == nil {
 		return
 	}
+	if atomic.LoadInt32(&l.closed) == 1 {
+		return
+	}
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf(format, v...)
 	logLine := fmt.Sprintf("[%s] %s: %s\n", timestamp, level, msg)
+
+	defer func() {
+		if recover() != nil {
+			atomic.AddInt64(&l.dropped, 1)
+		}
+	}()
 
 	select {
 	case l.entries <- logLine:

@@ -57,6 +57,20 @@ type fakeCache struct {
 	records map[string]*IntelRecord
 }
 
+type fakeWhois struct {
+	mu     sync.Mutex
+	record WhoisRecord
+	calls  int
+}
+
+func (w *fakeWhois) Lookup(context.Context, string) (WhoisRecord, error) {
+	w.mu.Lock()
+	w.calls++
+	rec := w.record
+	w.mu.Unlock()
+	return rec, nil
+}
+
 func (c *fakeCache) Get(domain string) (*IntelRecord, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -123,7 +137,14 @@ func TestProcessSingleSanitizesAndExtractsProviders(t *testing.T) {
 		},
 		calls: make(map[string]int),
 	}
-	p := NewProcessor(resolver, nil, 1, time.Second)
+	whois := &fakeWhois{
+		record: WhoisRecord{
+			RegistrarWhoisServer: "whois.example-registrar.net",
+			UpdatedDate:          "2026-02-06",
+			CreationDate:         "2026-01-20",
+		},
+	}
+	p := NewProcessorWithWhois(resolver, nil, 1, time.Second, whois)
 
 	record := p.processSingle(context.Background(), DomainRecord{Domain: "example.com"})
 
@@ -132,6 +153,12 @@ func TestProcessSingleSanitizesAndExtractsProviders(t *testing.T) {
 	}
 	if len(record.Providers) != 2 {
 		t.Fatalf("expected two providers, got %#v", record.Providers)
+	}
+	if record.RegistrarWhoisServer != "whois.example-registrar.net" {
+		t.Fatalf("unexpected registrar whois server: %q", record.RegistrarWhoisServer)
+	}
+	if record.UpdatedDate != "2026-02-06" || record.CreationDate != "2026-01-20" {
+		t.Fatalf("unexpected whois dates: updated=%q creation=%q", record.UpdatedDate, record.CreationDate)
 	}
 	if record.Timestamp.IsZero() {
 		t.Fatal("expected timestamp to be set")

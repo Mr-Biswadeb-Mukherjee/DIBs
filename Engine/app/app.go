@@ -26,14 +26,17 @@ type IntelDomain struct {
 }
 
 type IntelRecord struct {
-	Domain    string
-	A         []string
-	AAAA      []string
-	CNAME     []string
-	NS        []string
-	MX        []string
-	TXT       []string
-	Providers []string
+	Domain               string
+	A                    []string
+	AAAA                 []string
+	CNAME                []string
+	NS                   []string
+	MX                   []string
+	TXT                  []string
+	Providers            []string
+	RegistrarWhoisServer string
+	UpdatedDate          string
+	CreationDate         string
 }
 
 type DNSIntelService interface {
@@ -217,14 +220,17 @@ func mapIntelRecords(records []intel.Record) []IntelRecord {
 	out := make([]IntelRecord, 0, len(records))
 	for _, rec := range records {
 		out = append(out, IntelRecord{
-			Domain:    rec.Domain,
-			A:         rec.A,
-			AAAA:      rec.AAAA,
-			CNAME:     rec.CNAME,
-			NS:        rec.NS,
-			MX:        rec.MX,
-			TXT:       rec.TXT,
-			Providers: rec.Providers,
+			Domain:               rec.Domain,
+			A:                    rec.A,
+			AAAA:                 rec.AAAA,
+			CNAME:                rec.CNAME,
+			NS:                   rec.NS,
+			MX:                   rec.MX,
+			TXT:                  rec.TXT,
+			Providers:            rec.Providers,
+			RegistrarWhoisServer: rec.RegistrarWhoisServer,
+			UpdatedDate:          rec.UpdatedDate,
+			CreationDate:         rec.CreationDate,
 		})
 	}
 	return out

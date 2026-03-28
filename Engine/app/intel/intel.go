@@ -21,14 +21,17 @@ type Domain struct {
 }
 
 type Record struct {
-	Domain    string
-	A         []string
-	AAAA      []string
-	CNAME     []string
-	NS        []string
-	MX        []string
-	TXT       []string
-	Providers []string
+	Domain               string
+	A                    []string
+	AAAA                 []string
+	CNAME                []string
+	NS                   []string
+	MX                   []string
+	TXT                  []string
+	Providers            []string
+	RegistrarWhoisServer string
+	UpdatedDate          string
+	CreationDate         string
 }
 
 //
@@ -47,9 +50,18 @@ func NewDNSIntelService(
 	workers int,
 	timeout time.Duration,
 ) *DNSIntelService {
+	return newDNSIntelServiceWithWhois(resolver, cache, workers, timeout, nil)
+}
 
+func newDNSIntelServiceWithWhois(
+	resolver dns_intel.Resolver,
+	cache dns_intel.Cache,
+	workers int,
+	timeout time.Duration,
+	whois dns_intel.WhoisLookup,
+) *DNSIntelService {
 	return &DNSIntelService{
-		processor: dns_intel.NewProcessor(resolver, cache, workers, timeout),
+		processor: dns_intel.NewProcessorWithWhois(resolver, cache, workers, timeout, whois),
 	}
 }
 
@@ -85,14 +97,17 @@ func (s *DNSIntelService) Run(
 	res := make([]Record, 0, len(out))
 	for _, r := range out {
 		res = append(res, Record{
-			Domain:    r.Domain,
-			A:         r.A,
-			AAAA:      r.AAAA,
-			CNAME:     r.CNAME,
-			NS:        r.NS,
-			MX:        r.MX,
-			TXT:       r.TXT,
-			Providers: r.Providers,
+			Domain:               r.Domain,
+			A:                    r.A,
+			AAAA:                 r.AAAA,
+			CNAME:                r.CNAME,
+			NS:                   r.NS,
+			MX:                   r.MX,
+			TXT:                  r.TXT,
+			Providers:            r.Providers,
+			RegistrarWhoisServer: r.RegistrarWhoisServer,
+			UpdatedDate:          r.UpdatedDate,
+			CreationDate:         r.CreationDate,
 		})
 	}
 

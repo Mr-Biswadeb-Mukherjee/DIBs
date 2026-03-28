@@ -13,15 +13,18 @@ import (
 )
 
 type intelNDJSONRecord struct {
-	Domain       string   `json:"domain"`
-	A            []string `json:"a,omitempty"`
-	AAAA         []string `json:"aaaa,omitempty"`
-	CNAME        []string `json:"cname,omitempty"`
-	NS           []string `json:"ns,omitempty"`
-	MX           []string `json:"mx,omitempty"`
-	TXT          []string `json:"txt,omitempty"`
-	Providers    []string `json:"providers,omitempty"`
-	TimestampUTC string   `json:"timestamp_utc"`
+	Domain               string   `json:"domain"`
+	A                    []string `json:"a,omitempty"`
+	AAAA                 []string `json:"aaaa,omitempty"`
+	CNAME                []string `json:"cname,omitempty"`
+	NS                   []string `json:"ns,omitempty"`
+	MX                   []string `json:"mx,omitempty"`
+	TXT                  []string `json:"txt,omitempty"`
+	Providers            []string `json:"providers,omitempty"`
+	RegistrarWhoisServer string   `json:"registrar_whois_server,omitempty"`
+	UpdatedDate          string   `json:"updated_date,omitempty"`
+	CreationDate         string   `json:"creation_date,omitempty"`
+	TimestampUTC         string   `json:"timestamp_utc"`
 }
 
 type generatedDomainMeta struct {
@@ -146,15 +149,18 @@ func resetIntelQueue(store intelQueueStore) error {
 
 func intelRecordToNDJSON(r IntelRecord) intelNDJSONRecord {
 	return intelNDJSONRecord{
-		Domain:       r.Domain,
-		A:            r.A,
-		AAAA:         r.AAAA,
-		CNAME:        r.CNAME,
-		NS:           r.NS,
-		MX:           r.MX,
-		TXT:          r.TXT,
-		Providers:    r.Providers,
-		TimestampUTC: time.Now().UTC().Format(time.RFC3339),
+		Domain:               r.Domain,
+		A:                    r.A,
+		AAAA:                 r.AAAA,
+		CNAME:                r.CNAME,
+		NS:                   r.NS,
+		MX:                   r.MX,
+		TXT:                  r.TXT,
+		Providers:            r.Providers,
+		RegistrarWhoisServer: r.RegistrarWhoisServer,
+		UpdatedDate:          r.UpdatedDate,
+		CreationDate:         r.CreationDate,
+		TimestampUTC:         time.Now().UTC().Format(time.RFC3339),
 	}
 }
 

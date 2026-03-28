@@ -5,11 +5,8 @@ package dns_intel
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/net/publicsuffix"
 )
 
 //
@@ -24,15 +21,18 @@ type DomainRecord struct {
 }
 
 type IntelRecord struct {
-	Domain    string
-	A         []string
-	AAAA      []string
-	CNAME     []string
-	NS        []string
-	MX        []string
-	TXT       []string
-	Providers []string
-	Timestamp time.Time
+	Domain               string
+	A                    []string
+	AAAA                 []string
+	CNAME                []string
+	NS                   []string
+	MX                   []string
+	TXT                  []string
+	Providers            []string
+	RegistrarWhoisServer string
+	UpdatedDate          string
+	CreationDate         string
+	Timestamp            time.Time
 }
 
 //
@@ -55,6 +55,10 @@ type Cache interface {
 	Set(domain string, record *IntelRecord)
 }
 
+type WhoisLookup interface {
+	Lookup(ctx context.Context, domain string) (WhoisRecord, error)
+}
+
 //
 // ==============================
 // Processor
@@ -64,12 +68,23 @@ type Cache interface {
 type Processor struct {
 	resolver Resolver
 	cache    Cache
+	whois    WhoisLookup
 
 	workers int
 	timeout time.Duration
 }
 
 func NewProcessor(r Resolver, c Cache, workers int, timeout time.Duration) *Processor {
+	return NewProcessorWithWhois(r, c, workers, timeout, nil)
+}
+
+func NewProcessorWithWhois(
+	r Resolver,
+	c Cache,
+	workers int,
+	timeout time.Duration,
+	whois WhoisLookup,
+) *Processor {
 	if workers <= 0 {
 		workers = 10
 	}
@@ -80,6 +95,7 @@ func NewProcessor(r Resolver, c Cache, workers int, timeout time.Duration) *Proc
 	return &Processor{
 		resolver: r,
 		cache:    c,
+		whois:    whois,
 		workers:  workers,
 		timeout:  timeout,
 	}
@@ -177,16 +193,21 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 	defer cancel()
 
 	var (
-		a     []string
-		aaaa  []string
-		cname []string
-		ns    []string
-		mx    []string
-		txt   []string
+		a       []string
+		aaaa    []string
+		cname   []string
+		ns      []string
+		mx      []string
+		txt     []string
+		whois   WhoisRecord
+		lookups = 6
 	)
+	if p.whois != nil {
+		lookups++
+	}
 
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(lookups)
 
 	// Parallel DNS lookups
 
@@ -220,99 +241,29 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 		txt, _ = p.resolver.LookupTXT(ctx, d.Domain)
 	}()
 
+	if p.whois != nil {
+		go func() {
+			defer wg.Done()
+			whois, _ = p.whois.Lookup(ctx, d.Domain)
+		}()
+	}
+
 	wg.Wait()
 
 	providers := extractProviders(cname, ns)
 
 	return IntelRecord{
-		Domain:    d.Domain,
-		A:         sanitize(a),
-		AAAA:      sanitize(aaaa),
-		CNAME:     sanitize(cname),
-		NS:        sanitize(ns),
-		MX:        sanitize(mx),
-		TXT:       sanitize(txt),
-		Providers: providers,
-		Timestamp: time.Now().UTC(),
+		Domain:               d.Domain,
+		A:                    sanitize(a),
+		AAAA:                 sanitize(aaaa),
+		CNAME:                sanitize(cname),
+		NS:                   sanitize(ns),
+		MX:                   sanitize(mx),
+		TXT:                  sanitize(txt),
+		Providers:            providers,
+		RegistrarWhoisServer: whois.RegistrarWhoisServer,
+		UpdatedDate:          whois.UpdatedDate,
+		CreationDate:         whois.CreationDate,
+		Timestamp:            time.Now().UTC(),
 	}
-}
-
-//
-// ==============================
-// Provider Extraction (NO hardcoding)
-// ==============================
-//
-
-func extractProviders(cnames, ns []string) []string {
-	all := append(cnames, ns...)
-
-	if len(all) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{})
-	out := make([]string, 0)
-
-	for _, v := range all {
-		root := extractRootDomain(v)
-		if root == "" {
-			continue
-		}
-
-		if _, ok := seen[root]; ok {
-			continue
-		}
-
-		seen[root] = struct{}{}
-		out = append(out, root)
-	}
-
-	return out
-}
-
-func extractRootDomain(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	host = strings.TrimSuffix(host, ".")
-
-	if host == "" {
-		return ""
-	}
-
-	domain, err := publicsuffix.EffectiveTLDPlusOne(host)
-	if err != nil {
-		return ""
-	}
-
-	return domain
-}
-
-//
-// ==============================
-// Helpers
-// ==============================
-//
-
-func sanitize(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(in))
-	seen := make(map[string]struct{})
-
-	for _, v := range in {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			continue
-		}
-
-		if _, ok := seen[v]; ok {
-			continue
-		}
-
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-
-	return out
 }

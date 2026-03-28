@@ -84,3 +84,18 @@ func TestNewLoggerUsesModuleFallbackName(t *testing.T) {
 		t.Fatalf("expected fallback module prefix, got %q", base)
 	}
 }
+
+func TestLoggerWriteAfterCloseIsSafe(t *testing.T) {
+	dir := t.TempDir()
+	log := NewLoggerInDir("app", dir)
+	if err := log.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("expected log after close to be safe, panic=%v", r)
+		}
+	}()
+	log.Warning("late log should not panic")
+}

@@ -192,14 +192,17 @@ type IntelDomain struct {
 }
 
 type IntelRecord struct {
-	Domain    string
-	A         []string
-	AAAA      []string
-	CNAME     []string
-	NS        []string
-	MX        []string
-	TXT       []string
-	Providers []string
+	Domain               string
+	A                    []string
+	AAAA                 []string
+	CNAME                []string
+	NS                   []string
+	MX                   []string
+	TXT                  []string
+	Providers            []string
+	RegistrarWhoisServer string
+	UpdatedDate          string
+	CreationDate         string
 }
 
 type DNSIntelService interface {
