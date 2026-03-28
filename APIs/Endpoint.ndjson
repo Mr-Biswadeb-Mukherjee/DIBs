@@ -1,8 +1,8 @@
 {"kind":"config","api_key_header":"X-API-Key"}
-{"kind":"route","name":"health","method":"GET","path":"/healthz","auth":false}
-{"kind":"route","name":"start","method":"POST","path":"/api/v3/start","auth":true}
-{"kind":"route","name":"stop","method":"POST","path":"/api/v3/stop","auth":true}
-{"kind":"route","name":"status","method":"GET","path":"/api/v3/status","auth":true}
-{"kind":"route","name":"metrics","method":"GET","path":"/api/v3/metrics","auth":true}
-{"kind":"route","name":"events","method":"GET","path":"/api/v3/events.ndjson","auth":true}
-{"kind":"route","name":"details","method":"GET","path":"/api/v3/details","auth":true}
+{"kind":"route","name":"health","method":"GET","path":"/healthz","auth":false,"rate_per_sec":25,"rate_per_min":600}
+{"kind":"route","name":"start","method":"POST","path":"/api/v3/start","auth":true,"rate_per_sec":2,"rate_per_min":20}
+{"kind":"route","name":"stop","method":"POST","path":"/api/v3/stop","auth":true,"rate_per_sec":2,"rate_per_min":20}
+{"kind":"route","name":"status","method":"GET","path":"/api/v3/status","auth":true,"rate_per_sec":10,"rate_per_min":300}
+{"kind":"route","name":"metrics","method":"GET","path":"/api/v3/metrics","auth":true,"rate_per_sec":10,"rate_per_min":300}
+{"kind":"route","name":"events","method":"GET","path":"/api/v3/events.ndjson","auth":true,"rate_per_sec":4,"rate_per_min":120}
+{"kind":"route","name":"details","method":"GET","path":"/api/v3/details","auth":true,"rate_per_sec":4,"rate_per_min":120}

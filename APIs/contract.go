@@ -21,10 +21,12 @@ type EndpointContract struct {
 }
 
 type RouteSpec struct {
-	Name   string
-	Method string
-	Path   string
-	Auth   bool
+	Name       string
+	Method     string
+	Path       string
+	Auth       bool
+	RatePerSec int
+	RatePerMin int
 }
 
 type contractRecord struct {
@@ -34,6 +36,8 @@ type contractRecord struct {
 	Method       string `json:"method,omitempty"`
 	Path         string `json:"path,omitempty"`
 	Auth         *bool  `json:"auth,omitempty"`
+	RatePerSec   int    `json:"rate_per_sec,omitempty"`
+	RatePerMin   int    `json:"rate_per_min,omitempty"`
 }
 
 var requiredRouteNames = []string{
@@ -121,15 +125,23 @@ func buildRouteSpec(rec contractRecord) (RouteSpec, error) {
 	if path == "" {
 		return RouteSpec{}, fmt.Errorf("route %s missing path", name)
 	}
+	if rec.RatePerSec <= 0 {
+		return RouteSpec{}, fmt.Errorf("route %s missing or invalid rate_per_sec", name)
+	}
+	if rec.RatePerMin <= 0 {
+		return RouteSpec{}, fmt.Errorf("route %s missing or invalid rate_per_min", name)
+	}
 	auth := false
 	if rec.Auth != nil {
 		auth = *rec.Auth
 	}
 	return RouteSpec{
-		Name:   name,
-		Method: method,
-		Path:   path,
-		Auth:   auth,
+		Name:       name,
+		Method:     method,
+		Path:       path,
+		Auth:       auth,
+		RatePerSec: rec.RatePerSec,
+		RatePerMin: rec.RatePerMin,
 	}, nil
 }
 

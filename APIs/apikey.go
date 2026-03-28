@@ -67,7 +67,10 @@ func LoadOrCreateAPIKeyPair(privateKey, privateKeyPath string) (APIKeyPair, erro
 	if strings.TrimSpace(privateKey) != "" {
 		return NewAPIKeyPairFromPrivate(privateKey)
 	}
-	path := resolvePrivateKeyPath(privateKeyPath)
+	path, err := resolvePrivateKeyPath(privateKeyPath)
+	if err != nil {
+		return APIKeyPair{}, err
+	}
 	pair, err := loadPairFromStore(path)
 	if err == nil {
 		return pair, nil
@@ -171,12 +174,8 @@ func wrapInvalidPrivate(err error) error {
 	return fmt.Errorf("%w: %v", errInvalidPrivateKey, err)
 }
 
-func resolvePrivateKeyPath(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed != "" {
-		return trimmed
-	}
-	return defaultPrivateKeyPath
+func resolvePrivateKeyPath(path string) (string, error) {
+	return normalizeSettingFilePath(path)
 }
 
 func loadPairFromStore(path string) (APIKeyPair, error) {

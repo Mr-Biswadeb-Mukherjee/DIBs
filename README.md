@@ -242,11 +242,19 @@ curl -s -X POST "$BASE/api/v3/stop"          -H "X-API-Key: $PUB_KEY"
 
 ### Endpoint Contract
 
-All API routes and auth requirements are declared in:
+All API routes, auth requirements, and per-endpoint rate policies are declared in:
 
 - `APIs/Endpoint.ndjson`
 
 This avoids production drift by keeping endpoint definitions in a single contract file.
+
+Each `route` record defines:
+
+- `name`, `method`, `path`, `auth`
+- `rate_per_sec` (required, integer > 0)
+- `rate_per_min` (required, integer > 0)
+
+Requests that exceed route policy are rejected with `429`.
 
 ### Authentication Model
 
@@ -266,21 +274,23 @@ Private key source priority:
 2. `INFERMAL_API_PRIVATE_KEY_PATH` (file path override)
 3. default file path: `Setting/api_private.key`
 
+For strict policy enforcement, API private-key file paths are accepted only inside `Setting/`.
+
 If no private key exists, Infermal generates one and stores it at the configured path.
 As long as this private key is preserved, restarts keep the same public key.
 If the private key is deleted or replaced, a new public key is derived and previous clients fail authentication.
 
 ### Control Endpoints
 
-| Endpoint | Method | Auth |
-|----------|--------|------|
-| `/healthz` | `GET` | No |
-| `/api/v3/start` | `POST` | Yes |
-| `/api/v3/stop` | `POST` | Yes |
-| `/api/v3/status` | `GET` | Yes |
-| `/api/v3/metrics` | `GET` | Yes |
-| `/api/v3/events.ndjson` | `GET` | Yes |
-| `/api/v3/details` | `GET` | Yes |
+| Endpoint | Method | Auth | Rate Policy Source |
+|----------|--------|------|--------------------|
+| `/healthz` | `GET` | No | `APIs/Endpoint.ndjson` |
+| `/api/v3/start` | `POST` | Yes | `APIs/Endpoint.ndjson` |
+| `/api/v3/stop` | `POST` | Yes | `APIs/Endpoint.ndjson` |
+| `/api/v3/status` | `GET` | Yes | `APIs/Endpoint.ndjson` |
+| `/api/v3/metrics` | `GET` | Yes | `APIs/Endpoint.ndjson` |
+| `/api/v3/events.ndjson` | `GET` | Yes | `APIs/Endpoint.ndjson` |
+| `/api/v3/details` | `GET` | Yes | `APIs/Endpoint.ndjson` |
 
 ### Quick Test with curl
 
@@ -304,6 +314,8 @@ curl -s -X POST "$BASE/api/v3/stop"           -H "X-API-Key: $PUB_KEY"
 - `section`: comma-separated sections (`session`, `metrics`, `generated`, `resolved`, `dns_intel`, `run_metrics`, `qps_history`) or `all`
 - `file`: optional file name inside `Output/` with `.json` or `.ndjson` extension
 - `limit`: required positive integer from client (for example `50000`, `100000`) to control rows returned for file-backed sections
+
+`file` is strictly constrained to `Output/`; path traversal and non-`Output` targets are rejected.
 
 Negative test:
 

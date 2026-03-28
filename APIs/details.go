@@ -47,8 +47,8 @@ type DetailsService struct {
 }
 
 func NewDetailsService(outputDir string) *DetailsService {
-	base := strings.TrimSpace(outputDir)
-	if base == "" {
+	base, err := normalizeOutputDir(outputDir)
+	if err != nil {
 		base = defaultDetailsOutputDir
 	}
 	return &DetailsService{outputDir: base}

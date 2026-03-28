@@ -87,7 +87,11 @@ func TestLatestQPSHistoryPathSelectsNewestName(t *testing.T) {
 
 func TestHandleDetailsReturnsRequestedSections(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "Generated_Domain.ndjson"), []string{
+	outputDir := filepath.Join(root, "Output")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatalf("mkdir output failed: %v", err)
+	}
+	writeTestFile(t, filepath.Join(outputDir, "Generated_Domain.ndjson"), []string{
 		`{"domain":"first.com"}`,
 		`{"domain":"last.com"}`,
 	})
@@ -100,7 +104,7 @@ func TestHandleDetailsReturnsRequestedSections(t *testing.T) {
 
 	server := &Server{
 		sessions: manager,
-		details:  NewDetailsService(root),
+		details:  NewDetailsService(outputDir),
 	}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(
@@ -128,13 +132,17 @@ func TestHandleDetailsReturnsRequestedSections(t *testing.T) {
 
 func TestHandleDetailsReadsCustomNDJSONFile(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "Custom.ndjson"), []string{
+	outputDir := filepath.Join(root, "Output")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatalf("mkdir output failed: %v", err)
+	}
+	writeTestFile(t, filepath.Join(outputDir, "Custom.ndjson"), []string{
 		`{"row":1}`,
 		`{"row":2}`,
 	})
 
 	manager := NewSessionManager(testRuntimeFactory)
-	server := &Server{sessions: manager, details: NewDetailsService(root)}
+	server := &Server{sessions: manager, details: NewDetailsService(outputDir)}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -161,14 +169,18 @@ func TestHandleDetailsReadsCustomNDJSONFile(t *testing.T) {
 
 func TestHandleDetailsReadsCustomJSONFile(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "events.json")
+	outputDir := filepath.Join(root, "Output")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatalf("mkdir output failed: %v", err)
+	}
+	path := filepath.Join(outputDir, "events.json")
 	payload := `[{"event":"a"},{"event":"b"}]`
 	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write file failed: %v", err)
 	}
 
 	manager := NewSessionManager(testRuntimeFactory)
-	server := &Server{sessions: manager, details: NewDetailsService(root)}
+	server := &Server{sessions: manager, details: NewDetailsService(outputDir)}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(
 		http.MethodGet,

@@ -106,7 +106,7 @@ func resolveCustomDetailsFile(outputDir, raw string) (string, error) {
 	if ext != ".json" && ext != ".ndjson" {
 		return "", errors.New("file must end with .json or .ndjson")
 	}
-	baseAbs, err := filepath.Abs(outputDir)
+	baseAbs, err := normalizeOutputDir(outputDir)
 	if err != nil {
 		return "", err
 	}
@@ -114,8 +114,8 @@ func resolveCustomDetailsFile(outputDir, raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if targetAbs != baseAbs && !strings.HasPrefix(targetAbs, baseAbs+string(os.PathSeparator)) {
-		return "", errors.New("file must be inside output directory")
+	if err := ensurePathWithinRoot(baseAbs, targetAbs); err != nil {
+		return "", err
 	}
 	return targetAbs, nil
 }

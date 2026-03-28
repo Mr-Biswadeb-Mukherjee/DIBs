@@ -19,6 +19,7 @@ type Server struct {
 	keys         APIKeyPair
 	apiKeyHeader string
 	details      *DetailsService
+	limiter      *EndpointRateLimiter
 }
 
 func NewRouter(
@@ -40,6 +41,7 @@ func NewRouter(
 		keys:         keys,
 		apiKeyHeader: contract.APIKeyHeader,
 		details:      NewDetailsService(defaultDetailsOutputDir),
+		limiter:      NewEndpointRateLimiter(),
 	}
 	mux, err := server.buildMux(contract)
 	if err != nil {
@@ -56,7 +58,8 @@ func (s *Server) buildMux(contract EndpointContract) (*http.ServeMux, error) {
 		if !ok {
 			return nil, fmt.Errorf("missing handler for route: %s", route.Name)
 		}
-		mux.HandleFunc(routePattern(route), s.applyAuth(route.Auth, handler))
+		withAuth := s.applyAuth(route.Auth, handler)
+		mux.HandleFunc(routePattern(route), s.applyRoutePolicy(route, withAuth))
 	}
 	return mux, nil
 }
@@ -85,6 +88,23 @@ func (s *Server) applyAuth(required bool, next http.HandlerFunc) http.HandlerFun
 		if !s.validAPIKey(r) {
 			writeError(w, http.StatusUnauthorized, "invalid api key")
 			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) applyRoutePolicy(route RouteSpec, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.limiter != nil {
+			ok, err := s.limiter.Allow(r.Context(), route.Name, route.RatePerSec, route.RatePerMin)
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "rate limiter unavailable")
+				return
+			}
+			if !ok {
+				writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+				return
+			}
 		}
 		next(w, r)
 	}
