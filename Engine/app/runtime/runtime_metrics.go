@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -241,16 +240,6 @@ func (s *cpuSampler) Percent(now time.Time) float64 {
 		return 0
 	}
 	return roundTo2((used / wallSeconds) * 100)
-}
-
-func processCPUSeconds() float64 {
-	var usage syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &usage); err != nil {
-		return 0
-	}
-	user := float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1_000_000
-	sys := float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1_000_000
-	return user + sys
 }
 
 func processRAMMB() float64 {
