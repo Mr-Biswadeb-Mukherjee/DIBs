@@ -5,6 +5,7 @@ package bootstrap
 
 import (
 	"errors"
+	"time"
 
 	app "github.com/Mr-Biswadeb-Mukherjee/DIBs/Engine/app"
 	config "github.com/Mr-Biswadeb-Mukherjee/DIBs/core/config"
@@ -32,6 +33,7 @@ func BuildEngineDependencies() (app.Dependencies, error) {
 	if err != nil {
 		return app.Dependencies{}, err
 	}
+	paths = alignRuntimeOutputPaths(paths, cfg.ResolveIntervalHours, time.Now())
 
 	logs := app.LogSet{
 		App:         logger.NewLoggerInDir("app", paths.logsDir),
