@@ -206,6 +206,8 @@ type IntelRecord struct {
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+	TTL                  int64
+	DNSSEC               bool
 }
 
 type IntelASNRecord struct {

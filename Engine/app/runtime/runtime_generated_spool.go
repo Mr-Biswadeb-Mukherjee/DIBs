@@ -61,6 +61,9 @@ func newGeneratedDomainSpool(keywordsPath string) (*generatedDomainSpool, error)
 func generatedSpoolPath(keywordsPath string) string {
 	clean := strings.TrimSpace(keywordsPath)
 	dir := filepath.Dir(clean)
+	if strings.EqualFold(filepath.Base(dir), "Output") {
+		dir = filepath.Join(filepath.Dir(dir), "Input")
+	}
 	if dir == "" || dir == "." {
 		dir = "."
 	}

@@ -106,6 +106,8 @@ func (a runtimeIntelServiceAdapter) Run(
 			RegistrarWhoisServer: rec.RegistrarWhoisServer,
 			UpdatedDate:          rec.UpdatedDate,
 			CreationDate:         rec.CreationDate,
+			TTL:                  rec.TTL,
+			DNSSEC:               rec.DNSSEC,
 		})
 	}
 	return out, nil

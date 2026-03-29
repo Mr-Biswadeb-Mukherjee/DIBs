@@ -38,6 +38,8 @@ type IntelRecord struct {
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+	TTL                  int64
+	DNSSEC               bool
 }
 
 type IntelASNRecord struct {
@@ -242,6 +244,8 @@ func mapIntelRecords(records []intel.Record) []IntelRecord {
 			RegistrarWhoisServer: rec.RegistrarWhoisServer,
 			UpdatedDate:          rec.UpdatedDate,
 			CreationDate:         rec.CreationDate,
+			TTL:                  rec.TTL,
+			DNSSEC:               rec.DNSSEC,
 		})
 	}
 	return out

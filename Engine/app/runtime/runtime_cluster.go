@@ -17,7 +17,7 @@ type clusterNDJSONRecord struct {
 	ASName      string   `json:"as_name,omitempty"`
 	Domains     []string `json:"domains"`
 	ClusterSize int      `json:"cluster_size"`
-	Timestamp   string   `json:"timestamp_utc"`
+	Timestamp   string   `json:"timestamp_ist"`
 }
 
 type asnClusterIndex struct {

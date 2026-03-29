@@ -33,6 +33,8 @@ type Record struct {
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+	TTL                  int64
+	DNSSEC               bool
 }
 
 type ASNInfo struct {
@@ -118,6 +120,8 @@ func (s *DNSIntelService) Run(
 			RegistrarWhoisServer: r.RegistrarWhoisServer,
 			UpdatedDate:          r.UpdatedDate,
 			CreationDate:         r.CreationDate,
+			TTL:                  r.TTL,
+			DNSSEC:               r.DNSSEC,
 		})
 	}
 

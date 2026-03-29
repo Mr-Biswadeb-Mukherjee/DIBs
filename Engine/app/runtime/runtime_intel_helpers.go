@@ -25,7 +25,9 @@ type intelNDJSONRecord struct {
 	RegistrarWhoisServer string                 `json:"registrar_whois_server,omitempty"`
 	UpdatedDate          string                 `json:"updated_date,omitempty"`
 	CreationDate         string                 `json:"creation_date,omitempty"`
-	TimestampUTC         string                 `json:"timestamp_utc"`
+	TTL                  int64                  `json:"ttl,omitempty"`
+	DNSSEC               bool                   `json:"dnssec"`
+	TimestampIST         string                 `json:"timestamp_ist"`
 }
 
 type intelASNNDJSONRecord struct {
@@ -193,7 +195,9 @@ func intelRecordToNDJSON(r IntelRecord) intelNDJSONRecord {
 		RegistrarWhoisServer: r.RegistrarWhoisServer,
 		UpdatedDate:          r.UpdatedDate,
 		CreationDate:         r.CreationDate,
-		TimestampUTC:         formatISTTimestamp(time.Now()),
+		TTL:                  r.TTL,
+		DNSSEC:               r.DNSSEC,
+		TimestampIST:         formatISTTimestamp(time.Now()),
 	}
 }
 

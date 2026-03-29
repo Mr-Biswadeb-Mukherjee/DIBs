@@ -18,7 +18,7 @@ const qpsHistoryTick = time.Second
 var istLocation = mustLoadISTLocation()
 
 type runMetricsRecord struct {
-	TimestampUTC     string  `json:"timestamp_utc"`
+	TimestampIST     string  `json:"timestamp_ist"`
 	DurationSeconds  float64 `json:"duration_seconds"`
 	GeneratedTotal   int64   `json:"generated_total"`
 	ResolvedTotal    int64   `json:"resolved_total"`
@@ -29,7 +29,7 @@ type runMetricsRecord struct {
 }
 
 type qpsHistoryRecord struct {
-	TimestampUTC   string  `json:"timestamp_utc"`
+	TimestampIST   string  `json:"timestamp_ist"`
 	ElapsedSeconds float64 `json:"elapsed_seconds"`
 	CompletedTotal int64   `json:"completed_total"`
 	IntelDoneTotal int64   `json:"intel_done_total"`
@@ -82,7 +82,7 @@ func buildRunMetricsRecord(
 ) runMetricsRecord {
 	durationSeconds := runDurationSeconds(startedAt, finishedAt)
 	return runMetricsRecord{
-		TimestampUTC:     formatISTTimestamp(finishedAt),
+		TimestampIST:     formatISTTimestamp(finishedAt),
 		DurationSeconds:  durationSeconds,
 		GeneratedTotal:   total,
 		ResolvedTotal:    resolved,
@@ -180,7 +180,7 @@ func (q *qpsHistoryWriter) writeSnapshot(now time.Time) {
 	cpuPercent := q.cpu.Percent(now)
 	ramMB := processRAMMB()
 	record := qpsHistoryRecord{
-		TimestampUTC:   formatISTTimestamp(now),
+		TimestampIST:   formatISTTimestamp(now),
 		ElapsedSeconds: roundTo2(now.Sub(q.start).Seconds()),
 		CompletedTotal: completed,
 		IntelDoneTotal: intelDone,

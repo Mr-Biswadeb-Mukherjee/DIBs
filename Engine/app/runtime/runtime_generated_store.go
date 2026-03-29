@@ -75,9 +75,7 @@ func streamGeneratedDomainsToSpool(
 }
 
 func resolveSpoolPathSeed(keywordsPath, generatedOutput string) string {
-	if strings.TrimSpace(keywordsPath) != "" {
-		return keywordsPath
-	}
+	_ = keywordsPath
 	return generatedOutput
 }
 

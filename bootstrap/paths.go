@@ -33,6 +33,8 @@ func loadRuntimePaths() runtimePaths {
 	pathsOnce.Do(func() {
 		repo := detectRuntimeRoot()
 		engineDir := filepath.Join(repo, "Engine")
+		dibsOutputDir := filepath.Join(repo, "DIBs_Output")
+		outputDir := filepath.Join(dibsOutputDir, "Output")
 		pathsSet = runtimePaths{
 			repo:             repo,
 			engine:           engineDir,
@@ -40,11 +42,11 @@ func loadRuntimePaths() runtimePaths {
 			keywordsCSV:      filepath.Join(engineDir, "Input", "Keywords.csv"),
 			settingConf:      filepath.Join(repo, "Setting", "setting.conf"),
 			redisConf:        filepath.Join(repo, "Setting", "redis.yaml"),
-			dnsIntelOutput:   filepath.Join(repo, "Output", "DNS_Intel.ndjson"),
-			generatedOutput:  filepath.Join(repo, "Output", "Generated_Domain.ndjson"),
-			resolvedOutput:   filepath.Join(repo, "Output", "Resolved_Domain.ndjson"),
-			clusterOutput:    filepath.Join(repo, "Output", "cluster.ndjson"),
-			runMetricsOutput: filepath.Join(repo, "Output", "Run_Metrics.ndjson"),
+			dnsIntelOutput:   filepath.Join(outputDir, "DNS_Intel.ndjson"),
+			generatedOutput:  filepath.Join(outputDir, "Generated_Domain.ndjson"),
+			resolvedOutput:   filepath.Join(outputDir, "Resolved_Domain.ndjson"),
+			clusterOutput:    filepath.Join(outputDir, "cluster.ndjson"),
+			runMetricsOutput: filepath.Join(outputDir, "Run_Metrics.ndjson"),
 		}
 	})
 	return pathsSet

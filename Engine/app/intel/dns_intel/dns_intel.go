@@ -33,6 +33,8 @@ type IntelRecord struct {
 	RegistrarWhoisServer string
 	UpdatedDate          string
 	CreationDate         string
+	TTL                  int64
+	DNSSEC               bool
 	Timestamp            time.Time
 }
 
@@ -49,6 +51,7 @@ type Resolver interface {
 	LookupNS(ctx context.Context, domain string) ([]string, error)
 	LookupMX(ctx context.Context, domain string) ([]string, error)
 	LookupTXT(ctx context.Context, domain string) ([]string, error)
+	LookupTTLAndDNSSEC(ctx context.Context, domain string) (int64, bool, error)
 }
 
 type Cache interface {
@@ -218,7 +221,9 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 		mx      []string
 		txt     []string
 		whois   WhoisRecord
-		lookups = 6
+		ttl     int64
+		dnssec  bool
+		lookups = 7
 	)
 	if p.whois != nil {
 		lookups++
@@ -258,6 +263,10 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 		defer wg.Done()
 		txt, _ = p.resolver.LookupTXT(ctx, d.Domain)
 	}()
+	go func() {
+		defer wg.Done()
+		ttl, dnssec, _ = p.resolver.LookupTTLAndDNSSEC(ctx, d.Domain)
+	}()
 
 	if p.whois != nil {
 		go func() {
@@ -286,6 +295,8 @@ func (p *Processor) processSingle(parentCtx context.Context, d DomainRecord) Int
 		RegistrarWhoisServer: whois.RegistrarWhoisServer,
 		UpdatedDate:          whois.UpdatedDate,
 		CreationDate:         whois.CreationDate,
+		TTL:                  ttl,
+		DNSSEC:               dnssec,
 		Timestamp:            time.Now().UTC(),
 	}
 }

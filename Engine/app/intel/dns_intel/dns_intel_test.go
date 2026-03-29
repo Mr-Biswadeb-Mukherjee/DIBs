@@ -30,6 +30,12 @@ func (r *fakeResolver) LookupCNAME(context.Context, string) ([]string, error) {
 func (r *fakeResolver) LookupNS(context.Context, string) ([]string, error)  { return r.lookup("NS") }
 func (r *fakeResolver) LookupMX(context.Context, string) ([]string, error)  { return r.lookup("MX") }
 func (r *fakeResolver) LookupTXT(context.Context, string) ([]string, error) { return r.lookup("TXT") }
+func (r *fakeResolver) LookupTTLAndDNSSEC(context.Context, string) (int64, bool, error) {
+	r.mu.Lock()
+	r.calls["META"]++
+	r.mu.Unlock()
+	return 300, true, nil
+}
 
 func (r *fakeResolver) lookup(kind string) ([]string, error) {
 	r.mu.Lock()
@@ -162,6 +168,9 @@ func TestProcessSingleSanitizesAndExtractsProviders(t *testing.T) {
 	}
 	if record.Timestamp.IsZero() {
 		t.Fatal("expected timestamp to be set")
+	}
+	if record.TTL != 300 || !record.DNSSEC {
+		t.Fatalf("expected ttl/dnssec metadata to be set, ttl=%d dnssec=%v", record.TTL, record.DNSSEC)
 	}
 }
 

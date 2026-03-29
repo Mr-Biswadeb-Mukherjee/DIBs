@@ -42,6 +42,11 @@ func (r *resolverStub) LookupTXT(context.Context, string) ([]string, error) {
 	return []string{"v=spf1 include:example.net"}, nil
 }
 
+func (r *resolverStub) LookupTTLAndDNSSEC(context.Context, string) (int64, bool, error) {
+	r.record("META")
+	return 600, true, nil
+}
+
 func (r *resolverStub) record(name string) {
 	r.mu.Lock()
 	r.calls = append(r.calls, name)
@@ -82,7 +87,10 @@ func TestDNSIntelServiceRunMapsProcessorOutput(t *testing.T) {
 	if len(record.Providers) != 2 {
 		t.Fatalf("expected two providers, got %#v", record.Providers)
 	}
-	if len(resolver.calls) != 6 {
-		t.Fatalf("expected six resolver calls, got %d", len(resolver.calls))
+	if len(resolver.calls) != 7 {
+		t.Fatalf("expected seven resolver calls, got %d", len(resolver.calls))
+	}
+	if record.TTL != 600 || !record.DNSSEC {
+		t.Fatalf("expected ttl/dnssec to be mapped, ttl=%d dnssec=%v", record.TTL, record.DNSSEC)
 	}
 }
