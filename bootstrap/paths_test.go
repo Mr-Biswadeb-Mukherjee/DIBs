@@ -82,3 +82,46 @@ func TestOutputDirForIntervalReusesLatestWithinInterval(t *testing.T) {
 		t.Fatalf("expected reuse %q, got %q", latest, got)
 	}
 }
+
+func TestResolveKeywordsPathPrefersInputBesideBinary(t *testing.T) {
+	root := t.TempDir()
+	engine := filepath.Join(root, "Engine")
+	preferred := filepath.Join(root, "Input", "Keywords.csv")
+	legacy := filepath.Join(engine, "Input", "Keywords.csv")
+
+	if err := os.MkdirAll(filepath.Dir(preferred), 0o750); err != nil {
+		t.Fatalf("mkdir preferred dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o750); err != nil {
+		t.Fatalf("mkdir legacy dir: %v", err)
+	}
+	if err := os.WriteFile(preferred, []byte("preferred"), 0o600); err != nil {
+		t.Fatalf("write preferred keywords: %v", err)
+	}
+	if err := os.WriteFile(legacy, []byte("legacy"), 0o600); err != nil {
+		t.Fatalf("write legacy keywords: %v", err)
+	}
+
+	got := resolveKeywordsPath(root, engine)
+	if got != preferred {
+		t.Fatalf("expected %q, got %q", preferred, got)
+	}
+}
+
+func TestResolveKeywordsPathFallsBackToLegacyEngineInput(t *testing.T) {
+	root := t.TempDir()
+	engine := filepath.Join(root, "Engine")
+	legacy := filepath.Join(engine, "Input", "Keywords.csv")
+
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o750); err != nil {
+		t.Fatalf("mkdir legacy dir: %v", err)
+	}
+	if err := os.WriteFile(legacy, []byte("legacy"), 0o600); err != nil {
+		t.Fatalf("write legacy keywords: %v", err)
+	}
+
+	got := resolveKeywordsPath(root, engine)
+	if got != legacy {
+		t.Fatalf("expected %q, got %q", legacy, got)
+	}
+}
