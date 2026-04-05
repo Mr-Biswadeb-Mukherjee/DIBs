@@ -42,15 +42,19 @@ Domain Generation → DNS Resolution → Intelligence Extraction → Correlation
 
 Outputs are emitted as structured NDJSON, enabling integration with SIEM platforms and downstream processing systems.
 
-This work is part of ongoing offensive security research conducted by `Biswadeb Mukherjee (Independent Research)`.
+This work is part of ongoing offensive security research conducted by Biswadeb Mukherjee (Independent Research).
 
 ---
 
 ## Whitepaper
 
-The full technical whitepaper is available here:
+The full technical whitepaper is available on my website:
 
-https://official-biswadeb941.in
+[Read the Whitepaper](https://official-biswadeb941.in)
+
+GitHub Release: https://github.com/Mr-Biswadeb-Mukherjee/DIBs/releases/tag/v1.0.0
+
+This whitepaper documents the system architecture, methodology, and findings from a controlled large-scale DNS intelligence operation.
 
 ---
 
@@ -222,7 +226,6 @@ If you use this work, please cite:
   year         = {2026},
   institution  = {Independent Research},
   url          = {https://official-biswadeb941.in},
-  howpublished = {\url{https://official-biswadeb941.in}},
 }
 ```
 
@@ -230,7 +233,9 @@ If you use this work, please cite:
 
 ## License
 
-This project is licensed under the Apache License 2.0. See the **[LICENSE](./LICENSE)** file for details.
+The source code is licensed under the Apache License 2.0.
+
+The whitepaper and documentation are licensed under CC BY 4.0.
 
 ---
 
