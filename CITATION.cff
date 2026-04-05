@@ -1,13 +1,26 @@
 cff-version: 1.2.0
-title: "DIBs: Domain Intelligence & Behavior System"
-message: "If you use this work, please cite it using the provided BibTeX."
+title: "Domain Intelligence & Behaviour System (DIBs)"
+message: "If you use this work, please cite the whitepaper or repository as below."
 type: software
 
 authors:
-  - family-names: Mukherjee
-    given-names: Biswadeb
+  - given-names: "Biswadeb"
+    family-names: "Mukherjee"
+    orcid: "https://orcid.org/0009-0005-4610-4010"
 
-year: 2026
-version: "v1.0"
+version: "1.0"
+date-released: 2026-04-06
 
-url: "https://github.com/Mr-Biswadeb-Mukherjee/DIBs"
+url: "https://official-biswadeb941.in"
+repository-code: "https://github.com/Mr-Biswadeb-Mukherjee/DIBs"
+
+preferred-citation:
+  type: report
+  authors:
+    - given-names: "Biswadeb"
+      family-names: "Mukherjee"
+      orcid: "https://orcid.org/0009-0005-4610-4010"
+  title: "Domain Intelligence & Behaviour System (DIBs)"
+  year: 2026
+  institution: "Independent Research"
+  url: "https://official-biswadeb941.in"

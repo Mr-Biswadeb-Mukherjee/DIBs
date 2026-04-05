@@ -22,7 +22,7 @@
 
 ---
 
-[Overview](#overview) · [Version](#version)
+[Overview](#overview) · [Version](#version) · [Whitepaper](#whitepaper)
 · [Architecture](#architecture) · [Features](#features) · [Getting Started](#getting-started) · [API](#api-control-plane) · [Use Cases](#-use-cases) · [Citation](#citation)
 </div>
 
@@ -42,7 +42,15 @@ Domain Generation → DNS Resolution → Intelligence Extraction → Correlation
 
 Outputs are emitted as structured NDJSON, enabling integration with SIEM platforms and downstream processing systems.
 
-This work is part of ongoing offensive security research conducted by `Biswadeb Mukherjee and his research lab`.
+This work is part of ongoing offensive security research conducted by `Biswadeb Mukherjee (Independent Research)`.
+
+---
+
+## Whitepaper
+
+The full technical whitepaper is available here:
+
+https://official-biswadeb941.in
 
 ---
 
@@ -207,14 +215,14 @@ RUN.md
 If you use this work, please cite:
 
 ```bibtex
-@misc{offsec-biswadeb2026.v1,
+@techreport{offsec-biswadeb2026-dibsv1,
   author       = {Mukherjee, Biswadeb},
-  title        = {\DocTitle},
+  title        = {Domain Intelligence \& Behaviour System (DIBs)},
+  version      = {v1},
   year         = {2026},
-  version      = {\DocVersion},
-  url          = {\DocWebsite},
+  institution  = {Independent Research},
+  url          = {https://official-biswadeb941.in},
   howpublished = {\url{https://official-biswadeb941.in}},
-  note         = {\DocType}
 }
 ```
 
@@ -231,6 +239,8 @@ This project is licensed under the Apache License 2.0. See the **[LICENSE](./LIC
 Biswadeb Mukherjee
 
 Offensive Security Specialist · Malware Engineer
+
+ORCID: https://orcid.org/0009-0005-4610-4010
 
 ---
 
