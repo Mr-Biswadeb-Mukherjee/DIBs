@@ -276,7 +276,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: test-results
           path: ci-artifacts/
@@ -286,7 +286,7 @@ jobs:
           gate=$(cat ci-artifacts/coverage_gate.txt 2>/dev/null || echo "UNKNOWN")
           [ "$gate" = "PASS" ] || { echo "::error::Release requires PASS coverage gate"; exit 1; }
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: DIBs-*
           path: dist/
